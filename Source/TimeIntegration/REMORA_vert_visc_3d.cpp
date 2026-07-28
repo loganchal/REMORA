@@ -57,7 +57,6 @@ REMORA::vert_visc_3d (const Box& phi_bx, const int ioff, const int joff,
     Gpu::synchronize();
 #else
 #endif
-    /////////////////// This and the following loop is the first non-matching thing that affects plotfile comparison for cuda
     // NOTE: vertical viscosity term for tracers is identical except AK=Akt
     const Real sixth = one / Real(6.0);
 
@@ -68,25 +67,31 @@ REMORA::vert_visc_3d (const Box& phi_bx, const int ioff, const int joff,
         CF(i,j,0) = zero;
     });
 
-    ParallelFor(makeSlab(phi_bx,2,0), N, [=] AMREX_GPU_DEVICE (int i, int j, int , int kk)
+    ParallelFor(makeSlab(phi_bx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
     {
-        int k = kk+1;
         //
         //  Use conservative, parabolic spline reconstruction of vertical
         //  viscosity derivatives.  Then, time step vertical viscosity term
         //  implicitly by solving a tridiagonal system.
         //
-        const Real oHzkm1 = one/ Hzk(i,j,k-1);
-        const Real oHz = one/ Hzk(i,j,k);
-        //const Real oHzkp1 = one/ Hzk(i,j,k+1);
+        //  The Thomas forward sweep is serial in k (CF(k)/DC(k) read
+        //  CF(k-1)/DC(k-1)), so it must run inside a single thread per
+        //  column. Fusing k into the ParallelFor index raced on GPU, which
+        //  is what made CUDA plotfiles diverge from CPU here; the backward
+        //  substitution below was already written as a column loop.
+        //
+        for (int k = 1; k <= N; k++) {
+            const Real oHzkm1 = one/ Hzk(i,j,k-1);
+            const Real oHz = one/ Hzk(i,j,k);
 
-        FC(i,j,k) = sixth * Hzk(i,j,k-1) - dt_lev * AK(i,j,k-1) / Hzk(i,j,k-1);
-        CF(i,j,k) = sixth * Hzk(i,j,k  ) - dt_lev * AK(i,j,k+1) / Hzk(i,j,k  );
+            FC(i,j,k) = sixth * Hzk(i,j,k-1) - dt_lev * AK(i,j,k-1) / Hzk(i,j,k-1);
+            CF(i,j,k) = sixth * Hzk(i,j,k  ) - dt_lev * AK(i,j,k+1) / Hzk(i,j,k  );
 
-        BC(i,j,k) = third * (Hzk(i,j,k-1) + Hzk(i,j,k  )) + dt_lev * AK(i,j,k) * (oHzkm1 + oHz);
-        Real cff = one / (BC(i,j,k) - FC(i,j,k) * CF(i,j,k-1));
-        CF(i,j,k) *= cff;
-        DC(i,j,k) = cff * (phi(i,j,k  ,nnew) - phi(i,j,k-1,nnew) - FC(i,j,k)*DC(i,j,k-1));
+            BC(i,j,k) = third * (Hzk(i,j,k-1) + Hzk(i,j,k  )) + dt_lev * AK(i,j,k) * (oHzkm1 + oHz);
+            Real cff = one / (BC(i,j,k) - FC(i,j,k) * CF(i,j,k-1));
+            CF(i,j,k) *= cff;
+            DC(i,j,k) = cff * (phi(i,j,k  ,nnew) - phi(i,j,k-1,nnew) - FC(i,j,k)*DC(i,j,k-1));
+        }
     });
 #ifdef AMREX_USE_GPU
     Gpu::synchronize();
