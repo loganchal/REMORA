@@ -723,9 +723,15 @@ REMORA::my25_corrector (int lev, MultiFab* mf_gls, MultiFab* mf_tke,
             tke(i,j,k,nnew) = std::max(tke(i,j,k,nnew), my_qmin);
             gls(i,j,k,nnew) = std::max(gls(i,j,k,nnew), my_qmin);
             Real Ls_unlmt = gls(i,j,k,nnew)/tke(i,j,k,nnew);
+            // NOTE: Real(0.0) rather than the namespace-scope `zero`.
+            // std::max takes const references, which ODR-uses its argument;
+            // a host constexpr has no device address, so nvcc rejects it with
+            // "identifier \"zero\" is undefined in device code". Passing a
+            // temporary avoids the ODR-use. (Assigning `= zero` is fine --
+            // that only reads the value.)
             Real Ls_lmt = std::min(Ls_unlmt,
                                    my_lmax*std::sqrt(tke(i,j,k,nnew)/
-                                       (std::max(zero,buoy2(i,j,k))+eps)));
+                                       (std::max(Real(0.0),buoy2(i,j,k))+eps)));
 
             // my25_corstep.F:717-731 (KANTHA_CLAYSON branch at :727-728)
             Real Gh = std::min(my_Gh0, -buoy2(i,j,k)*Ls_lmt*Ls_lmt/tke(i,j,k,nnew));
