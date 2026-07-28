@@ -48,6 +48,14 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     MultiFab mf_DC(ba,dm,1,IntVect(NGROW,NGROW,NGROW-1)); //2d missing j coordinate
     MultiFab mf_logdrg_tmp(ba,dm,1,IntVect(NGROW,NGROW,0));
     MultiFab mf_rho(ba,dm,1,IntVect(NGROW,NGROW,0));
+    // Potential density anomaly referenced to the surface (ROMS OCEAN(ng)%pden).
+    // Only the isopycnic harmonic tracer mixing option consumes it, so it is
+    // only allocated when that option is selected.
+    const bool calc_pden = (solverChoice.harmonic_mixing_type == HarmonicMixingType::isopycnal);
+    MultiFab mf_pden;
+    if (calc_pden) {
+        mf_pden.define(ba,dm,1,IntVect(NGROW,NGROW,0));
+    }
 
     MultiFab* mf_z_r = vec_z_r[lev].get();
     MultiFab* mf_z_w = vec_z_w[lev].get();
@@ -87,6 +95,9 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     // We need to set these because otherwise in the first call to remora_advance we may
     //    read uninitialized data on ghost values in setting the bc's on the velocities
     mf_rho.setVal(zero,IntVect(AMREX_D_DECL(NGROW-1,NGROW-1,0)));
+    if (calc_pden) {
+        mf_pden.setVal(zero,IntVect(AMREX_D_DECL(NGROW-1,NGROW-1,0)));
+    }
     mf_rhoS->setVal(zero,IntVect(AMREX_D_DECL(NGROW-1,NGROW-1,0)));
     mf_rhoA->setVal(zero,IntVect(AMREX_D_DECL(NGROW-1,NGROW-1,0)));
     mf_DC.setVal(zero);
@@ -135,6 +146,7 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         Array4<Real const> const& uold  = U_old.const_array(mfi);
         Array4<Real const> const& vold  = V_old.const_array(mfi);
         Array4<Real      > const& rho   = mf_rho.array(mfi);
+        Array4<Real      > const& pden  = calc_pden ? mf_pden.array(mfi) : Array4<Real>();
         Array4<Real      > const& rhoA  = mf_rhoA->array(mfi);
         Array4<Real      > const& rhoS  = mf_rhoS->array(mfi);
         Array4<Real      > const& bvf   = mf_bvf->array(mfi);
@@ -183,7 +195,7 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         });
 
         Array4<Real const> const& state_old = S_old.const_array(mfi);
-        rho_eos(gbx2,state_old,rho,rhoA,rhoS,bvf,alpha,beta,Hz,z_w,z_r,h,mskr,N);
+        rho_eos(gbx2,state_old,rho,pden,rhoA,rhoS,bvf,alpha,beta,Hz,z_w,z_r,h,mskr,N);
     }
 
     const Real Cdb_min = solverChoice.Cdb_min;
@@ -358,6 +370,7 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         Array4<Real> const& u    = U_new.array(mfi);
         Array4<Real> const& v    = V_new.array(mfi);
         Array4<Real> const& rho = (mf_rho).array(mfi);
+        Array4<Real const> const& pden = calc_pden ? mf_pden.const_array(mfi) : Array4<Real const>();
         Array4<Real> const& ru = (mf_ru)->array(mfi);
         Array4<Real> const& rv = (mf_rv)->array(mfi);
         Array4<Real> const& rufrc = (mf_rufrc)->array(mfi);
@@ -457,11 +470,11 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         Array4<Real> const& s_arr_rhs = S_old.array(mfi);
         Array4<Real> const& diff2_arr = vec_diff2[lev]->array(mfi);
 
-        t3dmix2(bx, s_arr, s_arr_rhs, diff2_arr, Hz, z_r, pm, pn, msku, mskv, dt_lev, ncomp, N);
+        t3dmix2(bx, s_arr, s_arr_rhs, diff2_arr, Hz, z_r, pden, pm, pn, msku, mskv, dt_lev, ncomp, N);
 
         for (int itrac = Tracer_comp; itrac < ncons; ++itrac) {
             Array4<Real> const& diff2_arr_scalar = vec_diff2[lev]->array(mfi,itrac);
-            t3dmix2(bx, S_new.array(mfi,itrac), S_old.array(mfi,itrac), diff2_arr_scalar, Hz, z_r, pm, pn, msku, mskv, dt_lev, 1, N);
+            t3dmix2(bx, S_new.array(mfi,itrac), S_old.array(mfi,itrac), diff2_arr_scalar, Hz, z_r, pden, pm, pn, msku, mskv, dt_lev, 1, N);
         }
 
         if (solverChoice.use_coriolis) {

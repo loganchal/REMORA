@@ -829,9 +829,9 @@ List of Parameters
 +------------------------------------------+----------------------------------------+------------------------+----------------+
 | **remora.harmonic_mixing_type**          | Whether harmonic mixing (tracers)      | ``s`` /                | ``s``          |
 |                                          |                                        |                        |                |
-|                                          | is calculated along s- or geopotential | ``geopotential``       |                |
+|                                          | is calculated along s-, geopotential,  | ``geopotential`` /     |                |
 |                                          |                                        |                        |                |
-|                                          | surfaces.                              |                        |                |
+|                                          | or isopycnic surfaces.                 | ``isopycnal``          |                |
 +------------------------------------------+----------------------------------------+------------------------+----------------+
 | **remora.vertical_mixing_type**          | Vertical mixing type. ``analytic``     | ``analytic`` /         | ``analytic``   |
 |                                          |                                        |                        |                |
@@ -1007,6 +1007,41 @@ A separate vertical coupling term (``FS``) accounts for cross-directional slopeâ
 interactions between horizontal and vertical derivatives. It is constructed using similar
 sign-dependent decompositions (min/max splitting) that select locally consistent horizontal
 and vertical neighbor contributions.
+
+Isopycnic rotated harmonic tracer diffusion
+-------------------------------------
+
+Harmonic tracer diffusion can instead be rotated along isopycnic (constant potential
+density) surfaces when ``remora.harmonic_mixing_type = "isopycnal"`` (``"isopycnic"``
+and ``"iso"`` are accepted as synonyms). This is a term-for-term port of the ROMS
+``TS_DIF2`` + ``MIX_ISO_TS`` option (``Nonlinear/t3dmix2_iso.h``) and is the
+configuration used by the Moana hindcast (``TNU2 = 25`` mÂ²/s for both active
+tracers).
+
+The structure mirrors the geopotential operator, with two differences:
+
+- The rotation is performed against the potential density field rather than the
+  geopotential coordinate. Horizontal density gradients ``dRdx``/``dRde`` replace the
+  slope fields ``dZdx``/``dZde``, and the vertical tracer derivative is taken with
+  respect to potential density,
+
+  .. math::
+
+     dTdr = -\frac{T(k)-T(k-1)}{\max\big(\rho_\theta(k-1)-\rho_\theta(k),\ \varepsilon\big)},
+
+  where :math:`\rho_\theta` is the surface-referenced potential density anomaly and
+  :math:`\varepsilon = 0.5` kg m\ :sup:`-3` clips weak or unstable stratification
+  (ROMS ``eps``; the ``TS_MIX_MAX_SLOPE`` and ``TS_MIX_MIN_STRAT`` alternatives are not
+  implemented, matching the Moana build).
+
+- The vertical coupling term additionally carries the layer thickness in density
+  coordinates, :math:`FS = -\,(z_r(k)-z_r(k-1))/\max(\rho_\theta(k-1)-\rho_\theta(k),\varepsilon)`,
+  which is then multiplied by the sign-split slope reconstruction and the diffusivity.
+
+Selecting this option causes the surface-referenced potential density (ROMS ``pden``)
+to be computed alongside the in-situ density in the equation of state. For a linear
+equation of state the two are identical; for the nonlinear equation of state ``pden``
+is the zero-pressure density anomaly.
 
 .. _list-of-parameters-drag:
 
