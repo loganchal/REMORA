@@ -32,7 +32,10 @@ constexpr amrex::Real bogus_large_value = amrex::Real(1.e150);
 constexpr amrex::Real Cp           = amrex::Real(3985.0);              // Specific heat of seawater [Joules/kg/degC]
 constexpr amrex::Real Csolar       = amrex::Real(1353.0);              // Solar irradiation constant [1360-1380 W/m2]
 constexpr amrex::Real Eradius      = amrex::Real(6371315.0);           // Earth equatorial radius [m]
-constexpr amrex::Real StefBo       = amrex::Real(5.670374419e-8);      // Stefan-Boltzmann constant [Watts/m2/K4]
+constexpr amrex::Real StefBo       = amrex::Real(5.67E-8);             // Stefan-Boltzmann constant [Watts/m2/K4]
+                                                                       // NOTE (Moana parity): ROMS mod_scalars.F uses 5.67E-8; the CODATA
+                                                                       // value differs by 66 ppm (~0.03 W/m2 in outgoing LW), so the
+                                                                       // Moana fork pins the ROMS value for oracle equivalence.
 constexpr amrex::Real emmiss       = amrex::Real(0.97);                // Infrared emissivity [non_dimensional]
 constexpr amrex::Real rhow         = amrex::Real(1000.0);              // fresh water density [kg/m3]
 constexpr amrex::Real g            = amrex::Real(9.81);                // acceleration due to gravity [m/s2]

@@ -846,7 +846,10 @@ public:
                  const int nrhs, const int N);
 
     /** \brief Update velocities or tracers with diffusion/viscosity
-     * as the last part of the prestep */
+     * as the last part of the prestep.
+     * The trailing srflx/z_w/solar_source arguments enable shortwave
+     * penetration (ROMS SOLAR_SOURCE) and are passed only for the
+     * temperature-component call. */
     void prestep_diffusion (const amrex::Box& bx,
                         const amrex::Box& gbx,
                         const int ioff, const int joff,
@@ -862,7 +865,10 @@ public:
                         const amrex::Array4<amrex::Real const>& pm,
                         const amrex::Array4<amrex::Real const>& pn,
                         const int iic, const int ntfirst, const int nnew, int nstp, int nrhs, int N,
-                        const amrex::Real lambda, const amrex::Real dt_lev);
+                        const amrex::Real lambda, const amrex::Real dt_lev,
+                        const amrex::Array4<amrex::Real const>& srflx = amrex::Array4<amrex::Real const>{},
+                        const amrex::Array4<amrex::Real const>& z_w = amrex::Array4<amrex::Real const>{},
+                        const bool solar_source = false);
 
     /** \brief Calculate effects of vertical viscosity or diffusivity */
     void vert_visc_3d (const amrex::Box& bx,

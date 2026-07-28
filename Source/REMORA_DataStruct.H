@@ -396,6 +396,18 @@ struct SolverChoice {
             amrex::Abort("remora.atm_press=true requires Pair forcing (remora.bulk_fluxes=true or driver coupling)");
         }
 
+        // Shortwave penetration into the water column (ROMS SOLAR_SOURCE):
+        // two-band Paulson & Simpson (1977) decay by Jerlov water type.
+        // Without this the entire shortwave flux heats the top model cell.
+        pp.queryAdd("solar_source",solar_source);
+        pp.queryAdd("jerlov_water_type",jerlov_water_type);
+        if (jerlov_water_type < 1 || jerlov_water_type > 9) {
+            amrex::Abort("remora.jerlov_water_type must be in 1..9 (ROMS WTYPE)");
+        }
+        if (solar_source && !(bulk_fluxes || atm2ocn_flux_mode)) {
+            amrex::Abort("remora.solar_source=true requires srflx forcing (remora.bulk_fluxes=true or driver coupling)");
+        }
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -855,6 +867,9 @@ struct SolverChoice {
     int vstretching = 4;
     // Inverse-barometer surface pressure in the PGF (ROMS ATM_PRESS)
     bool atm_press = false;
+    // Shortwave penetration (ROMS SOLAR_SOURCE) and Jerlov water type (WTYPE)
+    bool solar_source = false;
+    int jerlov_water_type = 1;
 
     // Linear drag coefficient [m/s]
     amrex::Real rdrag = amrex::Real(3e-4);

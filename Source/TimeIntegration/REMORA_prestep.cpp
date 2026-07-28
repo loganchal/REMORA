@@ -166,9 +166,13 @@ REMORA::prestep (int lev,
         for (int i_comp=0; i_comp < ncons; i_comp++) {
             const Array4<Real const>& stflx = vec_stflx[lev]->const_array(mfi,i_comp);
             const Array4<Real const>& btflx = vec_btflx[lev]->const_array(mfi,i_comp);
+            // Shortwave penetration (SOLAR_SOURCE) applies to temperature only
+            const bool do_solar = solverChoice.solar_source && (i_comp == Temp_comp);
+            const Array4<Real const> srflx_arr = do_solar ?
+                vec_srflx[lev]->const_array(mfi) : Array4<Real const>{};
             prestep_diffusion(bx,gbx,0,0,S_new.array(mfi,i_comp), S_old.array(mfi,i_comp), ru,
                               Hz, Akt, FC, stflx, btflx, z_r, pm, pn, iic, iic, nnew, nstp,
-                              nrhs, N, lambda, dt_lev);
+                              nrhs, N, lambda, dt_lev, srflx_arr, z_w, do_solar);
         }
 
         //
