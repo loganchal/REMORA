@@ -293,6 +293,31 @@ fill_fab_from_arrays (int iv,
  * @param fill_time What time step to read from file, if only reading one step
  * @param custom_ngrow Number of grow cells to read in the fab; default is based off of one cell in each of x and y directions
  */
+/**
+ * Number of records in the leading (time) dimension of a variable.
+ * Used to resolve ROMS NRREC=-1 semantics ("last record in file") when
+ * hot-starting from a ROMS his/rst file.
+ *
+ * @param fname     NetCDF file to query
+ * @param var_name  variable whose leading dimension is the record dimension
+ */
+inline int
+get_num_time_records (const std::string& fname, const std::string& var_name)
+{
+    int nrec = 0;
+    if (amrex::ParallelDescriptor::IOProcessor()) {
+        auto ncf = ncutils::NCFile::open(fname, NC_NOWRITE);
+        if (!ncf.has_var(var_name)) {
+            amrex::Abort("get_num_time_records: variable " + var_name + " not found in " + fname);
+        }
+        std::vector<MPI_Offset> shape = ncf.var(var_name).shape();
+        nrec = static_cast<int>(shape[0]);
+        ncf.close();
+    }
+    amrex::ParallelDescriptor::Bcast(&nrec, 1, amrex::ParallelDescriptor::IOProcessorNumber());
+    return nrec;
+}
+
 template<class FAB,typename DType>
 void
 BuildFABsFromNetCDFFile (const amrex::Box& domain,

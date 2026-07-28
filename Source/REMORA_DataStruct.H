@@ -415,6 +415,10 @@ struct SolverChoice {
             amrex::Abort("remora.solar_source=true requires srflx forcing (remora.bulk_fluxes=true or driver coupling)");
         }
 
+        // Hot start from a ROMS his/rst record (ROMS NRREC / ININAME)
+        pp.queryAdd("nc_init_record",nc_init_record);
+        pp.queryAdd("init_ubar_from_file",init_ubar_from_file);
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -879,6 +883,12 @@ struct SolverChoice {
     // Shortwave penetration (ROMS SOLAR_SOURCE) and Jerlov water type (WTYPE)
     bool solar_source = false;
     int jerlov_water_type = 1;
+    // Record to initialize from in a ROMS his/rst file. Negative counts back
+    // from the end, so -1 is ROMS NRREC=-1 ("last record"). Default 0 keeps
+    // upstream single-record behavior.
+    int nc_init_record = 0;
+    // Also read ubar/vbar from the init file (ROMS non-PERFECT_RESTART set)
+    bool init_ubar_from_file = false;
 
     // Linear drag coefficient [m/s]
     amrex::Real rdrag = amrex::Real(3e-4);

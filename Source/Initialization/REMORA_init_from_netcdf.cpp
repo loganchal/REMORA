@@ -15,7 +15,14 @@ using namespace amrex;
 void
 read_data_from_netcdf (int /*lev*/, const Box& domain, const std::string& fname,
                        FArrayBox& NC_temp_fab, FArrayBox& NC_salt_fab,
-                       FArrayBox& NC_xvel_fab, FArrayBox& NC_yvel_fab);
+                       FArrayBox& NC_xvel_fab, FArrayBox& NC_yvel_fab,
+                       int init_record);
+
+/** \brief helper function for reading barotropic velocity of a ROMS his/rst record */
+void
+read_ubar_from_netcdf (int /*lev*/, const Box& domain, const std::string& fname,
+                       FArrayBox& NC_ubar_fab, FArrayBox& NC_vbar_fab,
+                       int init_record);
 
 /** \brief helper function for reading in full domain high-resolution initial state data from netcdf */
 void
@@ -83,7 +90,7 @@ read_coriolis_from_netcdf (int lev, const Box& domain, const std::string& fname,
 /** \brief helper function to read sea surface height from netcdf */
 void
 read_zeta_from_netcdf (int lev, const Box& domain, const std::string& fname,
-                             FArrayBox& NC_zeta_fab);
+                             FArrayBox& NC_zeta_fab, int init_record);
 
 /** \brief helper function to read high-resolution full-domain sea surface height from netcdf */
 void
@@ -121,7 +128,8 @@ REMORA::init_data_from_netcdf (int lev)
     {
         read_data_from_netcdf(lev, boxes_at_level[lev][idx], nc_init_file[lev][idx],
                               NC_temp_fab[idx], NC_salt_fab[idx],
-                              NC_xvel_fab[idx], NC_yvel_fab[idx]);
+                              NC_xvel_fab[idx], NC_yvel_fab[idx],
+                              solverChoice.nc_init_record);
     }
 
 
@@ -216,7 +224,7 @@ REMORA::init_zeta_from_netcdf (int lev)
     for (int idx = 0; idx < num_boxes_at_level[lev]; idx++)
     {
         read_zeta_from_netcdf(lev,boxes_at_level[lev][idx], nc_init_file[lev][idx],
-                                    NC_zeta_fab[idx]);
+                                    NC_zeta_fab[idx], solverChoice.nc_init_record);
 
 #ifdef _OPENMP
 #pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
@@ -235,6 +243,35 @@ REMORA::init_zeta_from_netcdf (int lev)
             zeta_fab.template    copy<RunOn::Device>(NC_zeta_fab[idx],0,0,1);
         } // mf
         } // omp
+
+        // ROMS without PERFECT_RESTART initializes from
+        // zeta/ubar/vbar/u/v/temp/salt, so a hot start from a his/rst record
+        // needs the barotropic velocity too (REMORA otherwise starts it at 0).
+        if (solverChoice.init_ubar_from_file) {
+            FArrayBox NC_ubar_fab, NC_vbar_fab;
+            read_ubar_from_netcdf(lev, boxes_at_level[lev][idx], nc_init_file[lev][idx],
+                                  NC_ubar_fab, NC_vbar_fab, solverChoice.nc_init_record);
+#ifdef _OPENMP
+#pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
+#endif
+            {
+            for ( MFIter mfi(*cons_new[lev], false); mfi.isValid(); ++mfi )
+            {
+                FArrayBox &ubar_fab = (*vec_ubar[lev])[mfi];
+                FArrayBox &vbar_fab = (*vec_vbar[lev])[mfi];
+                // Fill every time slot: the first step reads whichever the
+                // index bookkeeping selects.
+                for (int icomp = 0; icomp < ubar_fab.nComp(); icomp++) {
+                    ubar_fab.template copy<RunOn::Device>(NC_ubar_fab,0,icomp,1);
+                }
+                for (int icomp = 0; icomp < vbar_fab.nComp(); icomp++) {
+                    vbar_fab.template copy<RunOn::Device>(NC_vbar_fab,0,icomp,1);
+                }
+            } // mf
+            } // omp
+            vec_ubar[lev]->FillBoundary(geom[lev].periodicity());
+            vec_vbar[lev]->FillBoundary(geom[lev].periodicity());
+        }
     } // idx
 
     vec_zeta[lev]->FillBoundary(geom[lev].periodicity());

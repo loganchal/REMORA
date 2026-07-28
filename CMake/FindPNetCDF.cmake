@@ -20,8 +20,25 @@ if (PNETCDF_INCLUDES AND PNETCDF_LIBRARIES)
   set (PNETCDF_FIND_QUIETLY TRUE)
 endif (PNETCDF_INCLUDES AND PNETCDF_LIBRARIES)
 
-find_package(PkgConfig REQUIRED QUIET)
-pkg_check_modules(PNETCDF REQUIRED IMPORTED_TARGET pnetcdf)
+find_package(PkgConfig QUIET)
+if (PKG_CONFIG_FOUND)
+  pkg_check_modules(PNETCDF IMPORTED_TARGET pnetcdf)
+endif ()
+
+# Fall back to a direct search when pkg-config is unavailable or the .pc file
+# is not on PKG_CONFIG_PATH. PNETCDF_DIR (or the environment variable of the
+# same name) may be set to the installation prefix.
+if (NOT PNETCDF_LINK_LIBRARIES)
+  find_path (PNETCDF_INCLUDE_DIRS pnetcdf.h
+             HINTS ${PNETCDF_DIR} ENV PNETCDF_DIR
+             PATH_SUFFIXES include)
+  find_library (PNETCDF_LINK_LIBRARIES NAMES pnetcdf
+                HINTS ${PNETCDF_DIR} ENV PNETCDF_DIR
+                PATH_SUFFIXES lib lib64)
+  if (PNETCDF_LINK_LIBRARIES)
+    set (PNETCDF_LIBRARIES pnetcdf)
+  endif ()
+endif ()
 
 # handle the QUIETLY and REQUIRED arguments and set PNETCDF_FOUND to TRUE if
 # all listed variables are TRUE
