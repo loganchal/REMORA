@@ -1599,6 +1599,18 @@ private:
     /** \brief Time of the start of the simulation, in seconds */
     amrex::Real start_time = zero;
 
+    /** \brief Model reference epoch, e.g. "2010-01-01 00:00:00" (ROMS TIME_REF).
+     *
+     * When set, every NetCDF input time series is converted to seconds since
+     * this epoch using its own CF units string, so files written against
+     * different epochs (the Moana set mixes 1950 and 2010) line up correctly.
+     * When empty, the legacy behaviour is kept: the units scale is applied but
+     * the epoch is ignored. */
+    std::string time_ref = "";
+    /** \brief time_ref expressed as seconds since 1970-01-01 (valid if have_time_ref) */
+    amrex::Real time_ref_epoch = zero;
+    bool have_time_ref = false;
+
     /** \brief If set, restart from this checkpoint file */
     std::string restart_chkfile = "";
 

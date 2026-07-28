@@ -1,5 +1,6 @@
 #include "REMORA_NCTimeSeriesBoundary.H"
 #include "REMORA_NCFile.H"
+#include "REMORA_TimeUnits.H"
 
 #include "AMReX_ParallelDescriptor.H"
 
@@ -63,13 +64,15 @@ void NCTimeSeriesBoundary::Initialize()
         // If it does not, print a warning and assume days
         int has_units = QueryNetCDFVarAttrStr(file_name, time_name, "units");
         amrex::ParallelDescriptor::Bcast(&has_units,1,ioproc);
+        std::string unit_str = "days since 1970-01-01";
         if (has_units) {
-            std::string unit_str = ReadNetCDFVarAttrStr(file_name, time_name, "units"); // works on proc 0
+            unit_str = ReadNetCDFVarAttrStr(file_name, time_name, "units"); // works on proc 0
             if (amrex::ParallelDescriptor::IOProcessor())
             {
-                if (unit_str.find("days") == std::string::npos) {
-                    amrex::Print() << "Units of ocean_time given as: " << unit_str << std::endl;
-                    amrex::Abort("Units must be in days.");
+                amrex::Real scale_probe = amrex::Real(86400.0), epoch_probe = amrex::Real(0.0);
+                if (!remora_time::parse_cf_time_units(unit_str, scale_probe, epoch_probe)) {
+                    amrex::Print() << "Units of " << time_name << " given as: " << unit_str << std::endl;
+                    amrex::Abort("Could not parse time units; expected e.g. \"days since 2010-01-01\".");
                 }
             }
         } else {
@@ -85,7 +88,12 @@ void NCTimeSeriesBoundary::Initialize()
             for (int nt(0); nt < ntimes_io; nt++)
             {
                 // Convert ocean time from days to seconds
-                bry_times.push_back((*(array_ts[0].get_data() + nt)) * amrex::Real(60.0) * amrex::Real(60.0) * amrex::Real(24.0));
+                {
+                    bool units_ok = true;
+                    bry_times.push_back(remora_time::to_model_seconds(
+                        *(array_ts[0].get_data() + nt), unit_str,
+                        remora_time::model_ref_epoch(), remora_time::model_have_ref(), units_ok));
+                }
                 file_for_time.push_back(ifile);
                 file_itime_offset.push_back(nt);
             }

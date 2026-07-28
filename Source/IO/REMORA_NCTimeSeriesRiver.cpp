@@ -1,5 +1,6 @@
 #include "REMORA_NCTimeSeriesRiver.H"
 #include "REMORA_NCFile.H"
+#include "REMORA_TimeUnits.H"
 
 #include "AMReX_ParallelDescriptor.H"
 
@@ -42,9 +43,10 @@ void NCTimeSeriesRiver::Initialize() {
         std::string unit_str = ReadNetCDFVarAttrStr(file_name, time_name, "units"); // works on proc 0
         if (amrex::ParallelDescriptor::IOProcessor())
         {
-            if (unit_str.find("days") == std::string::npos) {
+            amrex::Real scale_probe = amrex::Real(86400.0), epoch_probe = amrex::Real(0.0);
+            if (!remora_time::parse_cf_time_units(unit_str, scale_probe, epoch_probe)) {
                 amrex::Print() << "Units of river_time given as: " << unit_str << std::endl;
-                amrex::Abort("Units must be in days.");
+                amrex::Abort("Could not parse time units; expected e.g. \"days since 2010-01-01\".");
             }
         }
 
@@ -58,7 +60,12 @@ void NCTimeSeriesRiver::Initialize() {
             for (int nt(0); nt < ntimes_io; nt++)
             {
                 // Convert river time from days to seconds
-                river_times.push_back((*(array_ts[0].get_data() + nt)) * amrex::Real(60.0) * amrex::Real(60.0) * amrex::Real(24.0));
+                {
+                    bool units_ok = true;
+                    river_times.push_back(remora_time::to_model_seconds(
+                        *(array_ts[0].get_data() + nt), unit_str,
+                        remora_time::model_ref_epoch(), remora_time::model_have_ref(), units_ok));
+                }
                 file_for_time.push_back(ifile);
                 file_itime_offset.push_back(nt);
             }

@@ -4,6 +4,7 @@
 
 #include <REMORA_prob_common.H>
 #include <REMORA.H>
+#include <REMORA_TimeUnits.H>
 
 #include <AMReX_buildInfo.H>
 
@@ -1658,6 +1659,21 @@ REMORA::ReadParameters ()
     pp.query("netcdf_fill_value", netcdf_fill_value);
     pp.queryAdd("restart", restart_chkfile);
     pp.queryAdd("start_time", start_time);
+
+    // Model reference epoch (ROMS TIME_REF). Lets input files written against
+    // different epochs be reconciled; see Source/IO/REMORA_TimeUnits.H.
+    pp.queryAdd("time_ref", time_ref);
+    if (!time_ref.empty()) {
+        amrex::Real scale_dummy = zero;
+        // Reuse the CF parser by handing it a well-formed units string.
+        if (!remora_time::parse_cf_time_units("seconds since " + time_ref,
+                                              scale_dummy, time_ref_epoch)) {
+            amrex::Abort("Could not parse remora.time_ref; expected YYYY-MM-DD[ HH:MM:SS]");
+        }
+        have_time_ref = true;
+        remora_time::model_ref_epoch() = time_ref_epoch;
+        remora_time::model_have_ref()  = true;
+    }
 
     num_boxes_at_level.resize(max_level + 1, 0);
     boxes_at_level.resize(max_level + 1);

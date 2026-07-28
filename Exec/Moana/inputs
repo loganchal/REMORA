@@ -17,6 +17,16 @@ remora.prob_name = Moana
 # ---------------------------------------------------------------- run
 remora.max_step = 100
 
+# Time base. The Moana input set mixes epochs and units:
+#   ini    seconds since 2010-01-01      meteo  days    since 2010-01-01
+#   bnd    seconds since 1950-01-01      clim   days    since 1950-01-01
+#   rivers days    since 2010-01-01
+# remora.time_ref makes every series resolve to seconds since one epoch;
+# without it the 1950- and 2010-based files would be silently 60 years apart.
+remora.time_ref   = 2010-01-01 00:00:00
+# 2021-01-01 = 4018 days after the reference (matches ocean_time in the ini file)
+remora.start_time = 347155200
+
 # -------------------------------------------- problem size & geometry
 # Horizontal extent is carried by the curvilinear grid file (pm/pn);
 # prob_lo/hi only set the vertical range and a nominal horizontal box.
@@ -31,6 +41,8 @@ remora.boundary_per_variable = 1
 ##                      WEST              SOUTH             EAST              NORTH
 remora.bc.temp.type   =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
 remora.bc.salt.type   =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
+# Moana carries no passive tracers, but REMORA still requires the entry.
+remora.bc.scalar.type =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
 remora.bc.u.type      =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
 remora.bc.v.type      =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
 remora.bc.ubar.type   =  flather           flather           flather           flather
