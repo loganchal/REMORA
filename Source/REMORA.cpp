@@ -280,6 +280,12 @@ REMORA::Evolve ()
             amrex::Print() << "Timestep time = " << dEvolveTime << " seconds." << '\n';
         }
 
+        // ROMS AVERAGES: take one sample of the just-completed state, and close
+        // the averaging window if this was the nAVG-th sample. Done before the
+        // history/checkpoint writes so the accumulators never see the temporary
+        // land-masking that mask_arrays_for_write applies during a write.
+        AverageAtIntermediateTime(step+1, cur_time);
+
         WriteAtIntermediateTime(step, cur_time);
 
         post_timestep(step, cur_time, dt[0]);
@@ -1672,6 +1678,11 @@ REMORA::ReadParameters ()
     pp.queryAdd("plot_file", plot_file_name);
     pp.queryAdd("plot_int", plot_int);
     pp.queryAdd("plot_int_time", plot_int_time);
+
+    // ROMS AVERAGES (time-averaged output). Default OFF (avg_int <= 0).
+    // avg_int is ROMS NAVG: the number of baroclinic steps per averaging window.
+    pp.queryAdd("avg_int", avg_int);
+    pp.queryAdd("avg_file", avg_file_name);
     pp.query("plot_staggered_vels", plot_staggered_vels);
     pp.query("plot_nodal_data", plot_nodal_data);
 
@@ -1723,6 +1734,10 @@ REMORA::ReadParameters ()
     if (plotfile_type == PlotfileType::netcdf)
     {
         amrex::Abort("Please compile with NetCDF in order to enable NetCDF plotfiles");
+    }
+    if (avg_int > 0)
+    {
+        amrex::Abort("remora.avg_int > 0 requires a NetCDF-enabled build (REMORA_ENABLE_PNETCDF=ON)");
     }
 
 #endif

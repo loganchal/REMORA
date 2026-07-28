@@ -113,6 +113,40 @@ public:
     /** \brief Write checkpoint and plotfiles at intermediate point of simulation, if needed */
     void WriteAtIntermediateTime (int step, amrex::Real cur_time);
 
+    // ---------------------------------------------------------------------
+    // ROMS-equivalent time-averaged ("AVERAGES") output. See
+    // Tests/MoanaParity/avg_port_notes.md and ROMS set_avg.F.
+    //
+    // NOTE (CUDA): every member function below that launches a device lambda
+    // is deliberately declared public, because nvcc forbids extended
+    // __device__ lambdas inside private/protected member functions.
+    // ---------------------------------------------------------------------
+
+    /** \brief Allocate (once) and zero the time-average accumulators */
+    void AverageInit ();
+
+    /** \brief Add one instantaneous sample to the accumulators (ROMS set_avg accumulate block) */
+    void AverageAccumulate ();
+
+    /** \brief Zero the accumulators and the per-window sample counter */
+    void AverageReset ();
+
+    /** \brief Scale every accumulator (valid + ghost cells) by fac.
+     *
+     * Public because it launches device lambdas (see CUDA note above). */
+    void AverageNormalize (amrex::Real fac);
+
+    /** \brief Normalize by 1/nAVG, write the avg record, then reset (ROMS set_avg normalization block) */
+    void AverageWriteAndReset (int which_step);
+
+    /** \brief Accumulate, and if the averaging window just closed, write and reset */
+    void AverageAtIntermediateTime (int step, amrex::Real cur_time);
+
+    /** \brief Land-mask the time-average accumulators for output.
+     *
+     * Public because it launches device lambdas (see CUDA note above). */
+    void mask_avg_arrays_for_write (int lev, amrex::Real fill_value, amrex::Real fill_where);
+
     /** \brief Tag cells for refinement */
     virtual void ErrorEst (int lev, amrex::TagBoxArray& tags, amrex::Real time, int ngrow) override;
 
@@ -1336,14 +1370,17 @@ private:
     void append3DPlotVariables (const std::string& pp_plot_var_names_3d);
 
 #ifdef REMORA_USE_NETCDF
-    /** \brief Write plotfile using NetCDF (wrapper) */
-    void WriteNCPlotFile       (int istep, amrex::MultiFab const* plotMF);
+    /** \brief Write plotfile using NetCDF (wrapper).
+     *
+     * If is_avg is true the time-averaged accumulators are written instead of the
+     * instantaneous state, into the file named by remora.avg_file. */
+    void WriteNCPlotFile       (int istep, amrex::MultiFab const* plotMF, bool is_avg = false);
 
     /** \brief Write a particular NetCDF plotfile */
     void WriteNCPlotFile_which (int lev, int which_subdomain,
                                 amrex::MultiFab const* plotMF,
                                 bool write_header, ncutils::NCFile& ncf,
-                                bool is_history);
+                                bool is_history, bool is_avg = false);
 
     /** \brief Write MultiFab in NetCDF format */
     void WriteNCMultiFab (const amrex::FabArray<amrex::FArrayBox> &fab,
@@ -1594,6 +1631,42 @@ private:
     int steps_per_history_file = -1;
     /** \brief Counter for which time index we are writing to in the netcdf history file */
     int history_count = 0;
+
+    // ---------------------------------------------------------------------
+    // ROMS AVERAGES (time-averaged output). Default OFF: avg_int <= 0.
+    // ---------------------------------------------------------------------
+    /** \brief Number of baroclinic steps per averaging window; ROMS NAVG. <= 0 disables averaging */
+    int avg_int = -1;
+    /** \brief Prefix of the time-averaged (avg) NetCDF output file; ROMS AVGNAME */
+    std::string avg_file_name {"avg"};
+    /** \brief Counter for which time index we are writing to in the netcdf avg file */
+    int avg_count = 0;
+    /** \brief Number of instantaneous samples accumulated so far in the current window */
+    int avg_nsamples = 0;
+    /** \brief Whether the accumulators have been allocated */
+    bool avg_initialized = false;
+
+    /** \brief Running sum of zeta (free surface) over the current averaging window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_zeta;
+    /** \brief Running sum of ubar over the current averaging window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_ubar;
+    /** \brief Running sum of vbar over the current averaging window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_vbar;
+    /** \brief Running sum of the 3D u velocity over the current averaging window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_u;
+    /** \brief Running sum of the 3D v velocity over the current averaging window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_v;
+    /** \brief Running sum of the conserved scalars (temp, salt, tracers) over the window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_cons;
+    /** \brief Running sum of the surface u-momentum stress over the current window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_sustr;
+    /** \brief Running sum of the surface v-momentum stress over the current window */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_avg_svstr;
+
+    /** \brief Names of the 3D cell-centered variables written to the avg file */
+    amrex::Vector<std::string> avg_var_names_3d;
+    /** \brief cons_new component index for each entry of avg_var_names_3d */
+    amrex::Vector<int> avg_cons_comp;
 
     /** \brief Names of 3D variables to output to AMReX plotfile */
     amrex::Vector<std::string> plot_var_names_3d;

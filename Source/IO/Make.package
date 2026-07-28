@@ -1,4 +1,5 @@
 
+CEXE_sources += REMORA_Average.cpp
 CEXE_sources += REMORA_Plotfile.cpp
 CEXE_sources += REMORA_SetPlotVars.cpp
 CEXE_sources += REMORA_Checkpoint.cpp

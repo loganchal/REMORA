@@ -130,6 +130,18 @@ List of Parameters
 |                                        |                                   |                       |            |
 |                                        | when using land/sea mask          |                       |            |
 +----------------------------------------+-----------------------------------+-----------------------+------------+
+| **remora.avg_int**                     | number of baroclinic steps per    | integer               | -1         |
+|                                        |                                   |                       |            |
+|                                        | time-averaging window             |                       |            |
+|                                        |                                   |                       |            |
+|                                        | (ROMS NAVG). <= 0 disables        |                       |            |
+|                                        |                                   |                       |            |
+|                                        | time-averaged (avg) output        |                       |            |
++----------------------------------------+-----------------------------------+-----------------------+------------+
+| **remora.avg_file**                     | prefix of the NetCDF time-        | String                | ``avg``    |
+|                                        |                                   |                       |            |
+|                                        | averaged output file              |                       |            |
++----------------------------------------+-----------------------------------+-----------------------+------------+
 
 
 .. _notes-5:
@@ -150,6 +162,14 @@ Notes
    NetCDF files.
 
 -  File prefixes can include directories.
+
+-  ROMS-equivalent time-averaged output ("AVERAGES") is written when ``remora.avg_int > 0``. Every
+   ``avg_int`` baroclinic steps the running sums of ``zeta``, ``ubar``, ``vbar``, ``u``, ``v``,
+   ``temp``, ``salt`` (and ``sustr``/``svstr``) are divided by ``avg_int`` and appended as one record
+   to ``<remora.avg_file>_d01.nc``, which uses exactly the same schema as the NetCDF history file.
+   ``ocean_time`` on each avg record is the model time at the *end* of the averaging window, matching
+   ROMS ``AVGtime = AVGtime + nAVG*dt``. Requires a PnetCDF-enabled build. The averaging window always
+   starts at the first step of the run; a restart begins a fresh window.
 
 -  If both ``remora.plot_int`` and ``remora.plot_int_time`` have been set, plotfile output will occur
   ``plot_int`` steps or ``plot_int_time`` simulation seconds after the last plotfile, whichever happens first.

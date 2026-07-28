@@ -20,8 +20,11 @@ using namespace amrex;
 
 /**
  * @param which_step   current step for output
+ * @param plotMF       cell-centered data to write (the avg accumulators when is_avg)
+ * @param is_avg       if true, write a ROMS-style time-averaged (avg) record instead
+ *                     of an instantaneous history/plot record
  */
-void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
+void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF, bool is_avg) {
     AMREX_ASSERT(max_level == 0);
     // For right now we assume single level -- we will generalize this later to multilevel
     int lev = 0;
@@ -31,13 +34,17 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
     // Create filename
     std::string plt_string;
     std::string plotfilename;
-    if (REMORA::write_history_file) {
+    if (is_avg) {
+        // ROMS avg files always hold a series of records in one file, regardless
+        // of how the history file is configured. Chunking is not applied.
+        plotfilename = avg_file_name;
+    } else if (REMORA::write_history_file) {
         plotfilename = plot_file_name + "_his";
     } else {
         plotfilename = Concatenate(plot_file_name, which_step, file_min_digits);
     }
     // If chunking, concatenate with which file we're in
-    if (REMORA::write_history_file and REMORA::chunk_history_file) {
+    if ((!is_avg) and REMORA::write_history_file and REMORA::chunk_history_file) {
         int which_chunk = history_count / REMORA::steps_per_history_file;
         plotfilename = Concatenate(plotfilename, which_chunk, file_min_digits);
         which_step_in_chunk = history_count - which_chunk * REMORA::steps_per_history_file;
@@ -58,7 +65,10 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
     //       have the IOProcessor move the existing
     //       file/directory to filename.old
     //
-    if ((!REMORA::write_history_file) || (which_step == 0) || (which_step_in_chunk == 0)) {
+    // The avg file is only rolled aside when we are about to write its first record.
+    const bool rename_existing = is_avg ? (avg_count == 0)
+                                        : ((!REMORA::write_history_file) || (which_step == 0) || (which_step_in_chunk == 0));
+    if (rename_existing) {
         if (amrex::ParallelDescriptor::IOProcessor()) {
             if (amrex::FileExists(FullPath)) {
                 std::string newoldname(FullPath + ".old." + amrex::UniqueString());
@@ -73,7 +83,7 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
 
     bool is_history;
 
-    if (REMORA::write_history_file) {
+    if (is_avg || REMORA::write_history_file) {
         is_history = true;
         bool write_header = !(amrex::FileExists(FullPath));
 
@@ -82,9 +92,10 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
                         ncutils::NCFile::create(FullPath, NC_CLOBBER|NC_64BIT_DATA, amrex::ParallelContext::CommunicatorSub(), MPI_INFO_NULL) :
                         ncutils::NCFile::open(FullPath, NC_WRITE, amrex::ParallelContext::CommunicatorSub(), MPI_INFO_NULL);
 
-        amrex::Print() << "Writing into level " << lev << " NetCDF history file " << FullPath << std::endl;
+        amrex::Print() << "Writing into level " << lev << " NetCDF "
+                       << (is_avg ? "avg" : "history") << " file " << FullPath << std::endl;
 
-        WriteNCPlotFile_which(lev, which_subdomain, plotMF, write_header, ncf, is_history);
+        WriteNCPlotFile_which(lev, which_subdomain, plotMF, write_header, ncf, is_history, is_avg);
 
     } else {
 
@@ -95,7 +106,7 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
         auto ncf = ncutils::NCFile::create(FullPath, NC_CLOBBER|NC_64BIT_DATA, amrex::ParallelContext::CommunicatorSub(), MPI_INFO_NULL);
         amrex::Print() << "Writing level " << lev << " NetCDF plot file " << FullPath << std::endl;
 
-        WriteNCPlotFile_which(lev, which_subdomain, plotMF, write_header, ncf, is_history);
+        WriteNCPlotFile_which(lev, which_subdomain, plotMF, write_header, ncf, is_history, is_avg);
     }
 }
 
@@ -105,10 +116,17 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF) {
  * @param write_header      whether to write a header
  * @param ncf               netcdf file object
  * @param is_history        whether the file being written is a history file
+ * @param is_avg            whether the file being written is a ROMS-style time-averaged file
  */
 void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const* plotMF,
-                                   bool write_header, ncutils::NCFile &ncf, bool is_history)
+                                   bool write_header, ncutils::NCFile &ncf, bool is_history,
+                                   bool is_avg)
 {
+    // For the avg file we write the time-averaged accumulators instead of the
+    // instantaneous state; everything else (schema, names, attributes, offsets)
+    // is shared with the history writer.
+    const Vector<std::string>& names_3d = is_avg ? avg_var_names_3d : plot_var_names_3d;
+
     // Number of cells in this "domain" at this level
     std::vector<int> n_cells;
 
@@ -131,7 +149,10 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
     }
 
     long long int nt;
-    if (is_history) {
+    if (is_avg) {
+        // One record per completed averaging window of avg_int baroclinic steps.
+        nt = (max_step > 0) ? std::max(1LL, static_cast<long long int>(max_step / avg_int)) : 1;
+    } else if (is_history) {
         if (max_step > 0) {
             nt = static_cast<long long int>(max_step / std::min(plot_int, max_step)) + 1;
         } else {
@@ -141,7 +162,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         nt = 1;
     }
 
-    if (chunk_history_file) {
+    if (chunk_history_file && !is_avg) {
         // First index of the last history file
         int last_file_index = REMORA::steps_per_history_file * int(nt / REMORA::steps_per_history_file);
         if (history_count >= last_file_index) {
@@ -349,8 +370,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
         {
             int comp = -1;
-            for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                if (plot_var_names_3d[i] == "temp") comp = i;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == "temp") comp = i;
             }
             if (comp >= 0) {
                 ncf.def_var_fill("temp", ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
@@ -366,8 +387,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
         {
             int comp = -1;
-            for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                if (plot_var_names_3d[i] == "salt") comp = i;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == "salt") comp = i;
             }
             if (comp >= 0) {
                 ncf.def_var_fill("salt", ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
@@ -382,8 +403,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
         {
             int comp = -1;
-            for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                if (plot_var_names_3d[i] == "tracer") comp = i;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == "tracer") comp = i;
             }
             if (comp >= 0) {
                 ncf.def_var_fill("tracer", ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
@@ -398,8 +419,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
         {
             int comp = -1;
-            for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                if (plot_var_names_3d[i] == "vorticity") comp = i;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == "vorticity") comp = i;
             }
             if (comp >= 0) {
                ncf.def_var_fill("vorticity", ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
@@ -488,7 +509,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         ncf.var("svstr").put_attr("coordinates","x_v y_v ocean_time");
         ncf.var("svstr").put_attr("field","surface v-momentum stress, scalar, series");
 
-        if (solverChoice.output_forcing) {
+        if (solverChoice.output_forcing && !is_avg) {
             // Surface air temperature (Celsius)
             ncf.def_var("Tair", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
             ncf.var("Tair").put_attr("long_name","surface air temperature");
@@ -678,42 +699,67 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
     // We compute the offsets based on location of the box within the domain
     //
     long long adjusted_history_count = chunk_history_file ? history_count % steps_per_history_file : history_count;
-    long long local_start_nt = (is_history ? static_cast<long long>(adjusted_history_count) : static_cast<long long>(0));
+    long long local_start_nt = is_avg ? static_cast<long long>(avg_count)
+                                      : (is_history ? static_cast<long long>(adjusted_history_count)
+                                                    : static_cast<long long>(0));
     long long local_nt = 1; // We write data for only one time
 
     {
         auto nc_plot_var = ncf.var("ocean_time");
         //nc_plot_var.par_access(NC_COLLECTIVE);
+        // ROMS set_avg.F:1782-1789: AVGtime = AVGtime + nAVG*dt, i.e. the model
+        // time at the end of the averaging window, which is t_new after the last
+        // accumulated step.
         nc_plot_var.put(&t_new[lev], { local_start_nt }, { local_nt });
     }
     // do all independent writes
     //ncmpi_end_indep_data(ncf.ncid);
 
-    mask_arrays_for_write(lev, (Real) netcdf_fill_value, zero);
+    // Select the source of each written field: the running time averages for the
+    // avg file, the instantaneous state otherwise.
+    const MultiFab* mf_zeta_out = is_avg ? vec_avg_zeta[lev].get() : vec_Zt_avg1[lev].get();
+    const MultiFab* mf_ubar_out = is_avg ? vec_avg_ubar[lev].get() : vec_ubar[lev].get();
+    const MultiFab* mf_vbar_out = is_avg ? vec_avg_vbar[lev].get() : vec_vbar[lev].get();
+    const MultiFab* mf_uvel_out = is_avg ? vec_avg_u[lev].get()    : xvel_new[lev];
+    const MultiFab* mf_vvel_out = is_avg ? vec_avg_v[lev].get()    : yvel_new[lev];
+    const MultiFab* mf_sustr_out = is_avg ? vec_avg_sustr[lev].get() : vec_sustr[lev].get();
+    const MultiFab* mf_svstr_out = is_avg ? vec_avg_svstr[lev].get() : vec_svstr[lev].get();
+
+    if (is_avg) {
+        mask_avg_arrays_for_write(lev, (Real) netcdf_fill_value, zero);
+    } else {
+        mask_arrays_for_write(lev, (Real) netcdf_fill_value, zero);
+    }
 
     // Check whether there are any nans or infs in variables that we will write out
-    if (vec_Zt_avg1[lev]->contains_nan() || vec_Zt_avg1[lev]->contains_inf()) {
+    if (mf_zeta_out->contains_nan() || mf_zeta_out->contains_inf()) {
         amrex::Abort("Found while writing output: zeta contains nan or inf");
     }
-    if (plotMF->contains_nan(Temp_comp,1) || plotMF->contains_inf(Temp_comp,1)) {
-        amrex::Abort("Found while writing output: Temperature contains nan or inf");
+    if (is_avg) {
+        if (plotMF->contains_nan() || plotMF->contains_inf()) {
+            amrex::Abort("Found while writing output: averaged scalar contains nan or inf");
+        }
+    } else {
+        if (plotMF->contains_nan(Temp_comp,1) || plotMF->contains_inf(Temp_comp,1)) {
+            amrex::Abort("Found while writing output: Temperature contains nan or inf");
+        }
+        if (plotMF->contains_nan(Salt_comp,1) || plotMF->contains_inf(Salt_comp,1)) {
+            amrex::Abort("Found while writing output: Salinity contains nan or inf");
+        }
+        if (plotMF->contains_nan(Tracer_comp,1) || plotMF->contains_inf(Tracer_comp,1)) {
+            amrex::Abort("Found while writing output: Passive tracer contains nan or inf");
+        }
     }
-    if (plotMF->contains_nan(Salt_comp,1) || plotMF->contains_inf(Salt_comp,1)) {
-        amrex::Abort("Found while writing output: Salinity contains nan or inf");
-    }
-    if (plotMF->contains_nan(Tracer_comp,1) || plotMF->contains_inf(Tracer_comp,1)) {
-        amrex::Abort("Found while writing output: Passive tracer contains nan or inf");
-    }
-    if (xvel_new[lev]->contains_nan() || xvel_new[lev]->contains_inf()) {
+    if (mf_uvel_out->contains_nan() || mf_uvel_out->contains_inf()) {
         amrex::Abort("Found while writing output: velocity u contains nan or inf");
     }
-    if (vec_ubar[lev]->contains_nan(0,1) || vec_ubar[lev]->contains_inf(0,1)) {
+    if (mf_ubar_out->contains_nan(0,1) || mf_ubar_out->contains_inf(0,1)) {
         amrex::Abort("Found while writing output: velocity ubar contains nan or inf");
     }
-    if (yvel_new[lev]->contains_nan() || yvel_new[lev]->contains_inf()) {
+    if (mf_vvel_out->contains_nan() || mf_vvel_out->contains_inf()) {
         amrex::Abort("Found while writing output: velocity v contains nan or inf");
     }
-    if (vec_vbar[lev]->contains_nan(0,1) || vec_vbar[lev]->contains_inf(0,1)) {
+    if (mf_vbar_out->contains_nan(0,1) || mf_vbar_out->contains_inf(0,1)) {
         amrex::Abort("Found while writing output: velocity vbar contains nan or inf");
     }
 
@@ -895,7 +941,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp_zeta;
                 tmp_zeta.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
-                tmp_zeta.template copy<RunOn::Device>((*vec_Zt_avg1[lev])[mfi.index()], 0, 0, 1);
+                tmp_zeta.template copy<RunOn::Device>((*mf_zeta_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("zeta");
@@ -903,7 +949,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                         local_nx });
             }
 
-            if (solverChoice.output_forcing)
+            if (solverChoice.output_forcing && !is_avg)
             {
                 const Real Hscale = solverChoice.rho0 * Cp;
                 // Tair
@@ -1055,8 +1101,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             // **************************************************************************
             { // Temp
                 int comp = -1;
-                for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                    if (plot_var_names_3d[i] == "temp") comp = i;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == "temp") comp = i;
                 }
                 if (comp >= 0) {
                     FArrayBox tmp;
@@ -1064,7 +1110,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
                     Gpu::streamSynchronize();
 
-                    auto nc_plot_var = ncf.var(plot_var_names_3d[comp]);
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
                     nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
                             local_nz, local_ny, local_nx });
                 } // if temp exists in plotMF
@@ -1074,8 +1120,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             // **************************************************************************
             { // Salt
                 int comp = -1;
-                for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                    if (plot_var_names_3d[i] == "salt") comp = i;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == "salt") comp = i;
                 }
                 if (comp >= 0) {
                     FArrayBox tmp;
@@ -1083,7 +1129,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
                     Gpu::streamSynchronize();
 
-                    auto nc_plot_var = ncf.var(plot_var_names_3d[comp]);
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
                     nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
                             local_nz, local_ny, local_nx });
                 } // if salt exists in plotMF
@@ -1093,8 +1139,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             // **************************************************************************
             { // Tracer
                 int comp = -1;
-                for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                    if (plot_var_names_3d[i] == "tracer") comp = i;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == "tracer") comp = i;
                 }
                 if (comp >= 0) {
                     FArrayBox tmp;
@@ -1102,7 +1148,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
                     Gpu::streamSynchronize();
 
-                    auto nc_plot_var = ncf.var(plot_var_names_3d[comp]);
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
                     nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
                             local_nz, local_ny, local_nx });
                 } // if tracer exists in plotMF
@@ -1112,8 +1158,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             // **************************************************************************
             { // Vorticity
                 int comp = -1;
-                for (int i = 0; i < plot_var_names_3d.size(); i++) {
-                    if (plot_var_names_3d[i] == "vorticity") comp = i;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == "vorticity") comp = i;
                 }
                 if (comp >= 0) {
                     FArrayBox tmp;
@@ -1121,7 +1167,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
                     Gpu::streamSynchronize();
 
-                    auto nc_plot_var = ncf.var(plot_var_names_3d[comp]);
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
                     nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
                             local_nz, local_ny, local_nx });
                 } // if vorticity exists in plotMF
@@ -1217,7 +1263,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*xvel_new[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_uvel_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("u");
@@ -1228,7 +1274,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*vec_ubar[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_ubar_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("ubar");
@@ -1237,7 +1283,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*vec_sustr[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_sustr_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("sustr");
@@ -1304,7 +1350,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*yvel_new[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_vvel_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("v");
@@ -1315,7 +1361,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*vec_vbar[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_vbar_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("vbar");
@@ -1325,7 +1371,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             {
                 FArrayBox tmp;
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
-                tmp.template copy<RunOn::Device>((*vec_svstr[lev])[mfi.index()], 0, 0, 1);
+                tmp.template copy<RunOn::Device>((*mf_svstr_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("svstr");
@@ -1385,9 +1431,17 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         } // in subdomain
     } // mfi
 
-    mask_arrays_for_write(lev, zero, netcdf_fill_value);
+    if (is_avg) {
+        // Undo the land masking so that the accumulators can keep accumulating
+        // (they are reset immediately after this write in any case).
+        mask_avg_arrays_for_write(lev, zero, netcdf_fill_value);
+    } else {
+        mask_arrays_for_write(lev, zero, netcdf_fill_value);
+    }
 
     ncf.close();
 
-    REMORA::total_nc_plot_file_step += 1;
+    if (!is_avg) {
+        REMORA::total_nc_plot_file_step += 1;
+    }
 }
