@@ -1394,8 +1394,8 @@ REMORA::init_only (int lev, Real time)
             if (nc_frc_file.empty() || nc_frc_file[0].empty()) {
                 amrex::Error("NetCDF forcing file name must be provided via input for surface momentum fluxes");
             }
-            sustr_data_from_file.reset(new NCTimeSeries(nc_frc_file, "sustr", frc_time_varname, geom[lev].Domain(),vec_sustr[lev].get(), true, false));
-            svstr_data_from_file.reset(new NCTimeSeries(nc_frc_file, "svstr", frc_time_varname, geom[lev].Domain(),vec_svstr[lev].get(), true, false));
+            sustr_data_from_file.reset(new NCTimeSeries(nc_frc_file, "sustr", frc_time_for(frc_wind_time_varname), geom[lev].Domain(),vec_sustr[lev].get(), true, false));
+            svstr_data_from_file.reset(new NCTimeSeries(nc_frc_file, "svstr", frc_time_for(frc_wind_time_varname), geom[lev].Domain(),vec_svstr[lev].get(), true, false));
             sustr_data_from_file->Initialize();
             svstr_data_from_file->Initialize();
         } else {
@@ -1416,35 +1416,35 @@ REMORA::init_only (int lev, Real time)
 
     if (lev==0) {
         if (bulk_flux_type[BulkFlux::Uwind] == BulkForcingType::netcdf) {
-            Uwind_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Uwind", frc_time_varname, geom[lev].Domain(),vec_uwind[lev].get(), true, false));
+            Uwind_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Uwind", frc_time_for(frc_wind_time_varname), geom[lev].Domain(),vec_uwind[lev].get(), true, false));
             Uwind_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Vwind] == BulkForcingType::netcdf) {
-            Vwind_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Vwind", frc_time_varname, geom[lev].Domain(),vec_vwind[lev].get(), true, false));
+            Vwind_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Vwind", frc_time_for(frc_wind_time_varname), geom[lev].Domain(),vec_vwind[lev].get(), true, false));
             Vwind_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Tair] == BulkForcingType::netcdf) {
-            Tair_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Tair", frc_time_varname, geom[lev].Domain(),vec_Tair[lev].get(), true, false));
+            Tair_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Tair", frc_time_for(frc_tair_time_varname), geom[lev].Domain(),vec_Tair[lev].get(), true, false));
             Tair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Qair] == BulkForcingType::netcdf) {
-            qair_data_from_file.reset(new NCTimeSeries(nc_frc_file, "qair", frc_time_varname, geom[lev].Domain(),vec_qair[lev].get(), true, false));
+            qair_data_from_file.reset(new NCTimeSeries(nc_frc_file, qair_netcdf_varname, frc_time_for(frc_qair_time_varname), geom[lev].Domain(),vec_qair[lev].get(), true, false));
             qair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Pair] == BulkForcingType::netcdf) {
-            Pair_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Pair", frc_time_varname, geom[lev].Domain(),vec_Pair[lev].get(), true, false));
+            Pair_data_from_file.reset(new NCTimeSeries(nc_frc_file, "Pair", frc_time_for(frc_pair_time_varname), geom[lev].Domain(),vec_Pair[lev].get(), true, false));
             Pair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::SWrad] == BulkForcingType::netcdf) {
-            srflx_data_from_file.reset(new NCTimeSeries(nc_frc_file, "swrad", frc_time_varname, geom[lev].Domain(),vec_srflx[lev].get(), true, false));
+            srflx_data_from_file.reset(new NCTimeSeries(nc_frc_file, "swrad", frc_time_for(frc_srf_time_varname), geom[lev].Domain(),vec_srflx[lev].get(), true, false));
             srflx_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Rain] == BulkForcingType::netcdf) {
-            rain_data_from_file.reset(new NCTimeSeries(nc_frc_file, "rain", frc_time_varname, geom[lev].Domain(),vec_rain[lev].get(), true, false));
+            rain_data_from_file.reset(new NCTimeSeries(nc_frc_file, "rain", frc_time_for(frc_rain_time_varname), geom[lev].Domain(),vec_rain[lev].get(), true, false));
             rain_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Cloud] == BulkForcingType::netcdf) {
-            cloud_data_from_file.reset(new NCTimeSeries(nc_frc_file, "cloud", frc_time_varname, geom[lev].Domain(),vec_cloud[lev].get(), true, false));
+            cloud_data_from_file.reset(new NCTimeSeries(nc_frc_file, "cloud", frc_time_for(frc_cloud_time_varname), geom[lev].Domain(),vec_cloud[lev].get(), true, false));
             cloud_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::EminusP] == BulkForcingType::netcdf) {
@@ -1452,7 +1452,7 @@ REMORA::init_only (int lev, Real time)
             EminusP_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::LWrad] == BulkForcingType::netcdf) {
-            longwave_down_data_from_file.reset(new NCTimeSeries(nc_frc_file, solverChoice.longwave_netcdf_varname, frc_time_varname,
+            longwave_down_data_from_file.reset(new NCTimeSeries(nc_frc_file, solverChoice.longwave_netcdf_varname, frc_time_for(frc_lrf_time_varname),
                                                                 geom[lev].Domain(), vec_longwave_down[lev].get(), true, false));
             longwave_down_data_from_file->Initialize();
         }
@@ -1839,6 +1839,17 @@ REMORA::ReadParameters ()
     }
 
     pp.queryAdd("frc_time_varname",frc_time_varname);
+    // Per-variable forcing time axes (ROMS convention); each falls back to
+    // frc_time_varname when unset.
+    pp.queryAdd("frc_wind_time_varname",frc_wind_time_varname);
+    pp.queryAdd("frc_tair_time_varname",frc_tair_time_varname);
+    pp.queryAdd("frc_qair_time_varname",frc_qair_time_varname);
+    pp.queryAdd("frc_pair_time_varname",frc_pair_time_varname);
+    pp.queryAdd("frc_srf_time_varname",frc_srf_time_varname);
+    pp.queryAdd("frc_lrf_time_varname",frc_lrf_time_varname);
+    pp.queryAdd("frc_rain_time_varname",frc_rain_time_varname);
+    pp.queryAdd("frc_cloud_time_varname",frc_cloud_time_varname);
+    pp.queryAdd("qair_netcdf_varname",qair_netcdf_varname);
 
     pp.queryAdd("riv_time_varname",riv_time_varname);
 

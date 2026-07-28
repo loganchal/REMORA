@@ -1738,6 +1738,33 @@ private:
     /** \brief Name of time field for forcing data */
     std::string frc_time_varname = "";
 
+    /** \brief Per-variable forcing time coordinate names.
+     *
+     * ROMS forcing files routinely give each field its own time axis
+     * (wind_time, pair_time, tair_time, qair_time, rain_time, srf_time,
+     * lrf_time ...), as the Moana nz5km meteo files do. Each of these
+     * defaults to frc_time_varname when left empty, so single-time-axis
+     * files behave exactly as before. Mirrors the existing
+     * bdy_*_time_varname mechanism for boundary files. */
+    std::string frc_wind_time_varname  = "";
+    std::string frc_tair_time_varname  = "";
+    std::string frc_qair_time_varname  = "";
+    std::string frc_pair_time_varname  = "";
+    std::string frc_srf_time_varname   = "";
+    std::string frc_lrf_time_varname   = "";
+    std::string frc_rain_time_varname  = "";
+    std::string frc_cloud_time_varname = "";
+
+    /** \brief Name of the specific-humidity variable in the forcing file.
+     * ROMS writes "Qair"; REMORA historically assumed "qair". */
+    std::string qair_netcdf_varname = "qair";
+
+    /** \brief Resolve a per-variable forcing time name, falling back to the
+     * shared frc_time_varname when it was not set. */
+    const std::string& frc_time_for (const std::string& per_var) const {
+        return per_var.empty() ? frc_time_varname : per_var;
+    }
+
     /** \brief Set refinement criteria */
     void refinement_criteria_setup();
 

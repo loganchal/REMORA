@@ -88,6 +88,29 @@ remora.coriolis_type = netcdf             # f from the grid file
 #          + PRESS_COMPENSATE + SOLAR_SOURCE
 remora.bulk_fluxes         = true
 remora.qair_is_percent     = true    # Moana Qair is % RH (see bulk-flux audit)
+
+# Every atmospheric field comes from the meteo file (REMORA defaults these to
+# constant/analytic, which would silently run with fabricated forcing).
+remora.uwind_type = netcdf
+remora.vwind_type = netcdf
+remora.tair_type  = netcdf
+remora.qair_type  = netcdf
+remora.pair_type  = netcdf
+remora.swrad_type = netcdf
+remora.lwrad_type = netcdf          # downward LW from file; upward computed (LONGWAVE_OUT)
+remora.rain_type  = netcdf
+
+# The Moana meteo file is standard ROMS: one time axis PER variable, and the
+# specific humidity is spelled "Qair" (REMORA historically assumed "qair").
+remora.frc_wind_time_varname = wind_time
+remora.frc_tair_time_varname = tair_time
+remora.frc_qair_time_varname = qair_time
+remora.frc_pair_time_varname = pair_time
+remora.frc_srf_time_varname  = srf_time
+remora.frc_lrf_time_varname  = lrf_time
+remora.frc_rain_time_varname = rain_time
+remora.qair_netcdf_varname   = Qair
+remora.longwave_netcdf_varname = lwrad_down
 remora.blk_ZW              = 10.0    # roms.in BLK_ZW
 remora.blk_ZT              = 2.0     # roms.in BLK_ZT  (REMORA default 10!)
 remora.blk_ZQ              = 2.0     # roms.in BLK_ZQ  (REMORA default 10!)
