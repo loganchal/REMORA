@@ -35,7 +35,11 @@ constexpr amrex::Real Eradius      = amrex::Real(6371315.0);           // Earth 
 constexpr amrex::Real StefBo       = amrex::Real(5.670374419e-8);      // Stefan-Boltzmann constant [Watts/m2/K4]
 constexpr amrex::Real emmiss       = amrex::Real(0.97);                // Infrared emissivity [non_dimensional]
 constexpr amrex::Real rhow         = amrex::Real(1000.0);              // fresh water density [kg/m3]
-constexpr amrex::Real g            = amrex::Real(9.80665);             // acceleration due to gravity [m/s2]
+constexpr amrex::Real g            = amrex::Real(9.81);                // acceleration due to gravity [m/s2]
+                                                                       // NOTE (Moana parity): ROMS mod_scalars.F uses g=9.81, not the
+                                                                       // standard-gravity 9.80665 upstream REMORA uses. A uniform 0.036%
+                                                                       // difference in every PGF/Flather/buoyancy term breaks oracle
+                                                                       // equivalence, so the Moana fork pins the ROMS value.
 constexpr amrex::Real vonKar       = amrex::Real(0.41);                // von Karman constant
 
 //-----------------------------------------------------------------------
