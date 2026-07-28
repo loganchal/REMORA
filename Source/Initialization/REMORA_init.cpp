@@ -162,6 +162,7 @@ REMORA::init_gls_vmix (int lev, SolverChoice solver_choice)
         Array4<Real> const& Akk = vec_Akk[lev]->array(mfi);
         Array4<Real> const& Akp = vec_Akp[lev]->array(mfi);
         Array4<Real> const& Akt = vec_Akt[lev]->array(mfi);
+        const int ncomp_akt = vec_Akt[lev]->nComp();
         Array4<Real> const& Akv = vec_Akv[lev]->array(mfi);
 
         ParallelFor(makeSlab(bx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
@@ -175,8 +176,16 @@ REMORA::init_gls_vmix (int lev, SolverChoice solver_choice)
             Akv(i,j, 0) = zero;
             Akv(i,j, N+1) = zero;
 
-            Akt(i,j, 0) = zero;
-            Akt(i,j, N+1) = zero;
+            // Zero the diffusivity end faces for EVERY tracer, not just
+            // component 0. ROMS mod_mixing.F:1003-1006 loops itrc=1,NAT; the
+            // 3-argument Array4 call here binds component 0 only, so salt
+            // kept Akt_bak at the surface and bottom w-faces for the whole
+            // run -- a spurious end-face salt diffusivity that the closure
+            // never overwrites (my25/gls correctly write only k=1..N-1).
+            for (int n = 0; n < ncomp_akt; n++) {
+                Akt(i,j, 0,   n) = zero;
+                Akt(i,j, N+1, n) = zero;
+            }
         });
     }
 }
@@ -216,6 +225,7 @@ REMORA::init_my25_vmix (int lev, SolverChoice solver_choice)
         Box bx = mfi.growntilebox(IntVect(NGROW,NGROW,0));
         Array4<Real> const& Akk = vec_Akk[lev]->array(mfi);
         Array4<Real> const& Akt = vec_Akt[lev]->array(mfi);
+        const int ncomp_akt = vec_Akt[lev]->nComp();
         Array4<Real> const& Akv = vec_Akv[lev]->array(mfi);
 
         ParallelFor(makeSlab(bx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
@@ -226,8 +236,16 @@ REMORA::init_my25_vmix (int lev, SolverChoice solver_choice)
             Akv(i,j, 0) = zero;
             Akv(i,j, N+1) = zero;
 
-            Akt(i,j, 0) = zero;
-            Akt(i,j, N+1) = zero;
+            // Zero the diffusivity end faces for EVERY tracer, not just
+            // component 0. ROMS mod_mixing.F:1003-1006 loops itrc=1,NAT; the
+            // 3-argument Array4 call here binds component 0 only, so salt
+            // kept Akt_bak at the surface and bottom w-faces for the whole
+            // run -- a spurious end-face salt diffusivity that the closure
+            // never overwrites (my25/gls correctly write only k=1..N-1).
+            for (int n = 0; n < ncomp_akt; n++) {
+                Akt(i,j, 0,   n) = zero;
+                Akt(i,j, N+1, n) = zero;
+            }
         });
     }
 }

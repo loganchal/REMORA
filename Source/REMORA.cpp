@@ -1380,6 +1380,17 @@ REMORA::init_only (int lev, Real time)
         if (max_level > 0) {
             amrex::Error("remora.tides=true is currently only supported for single-level runs");
         }
+        // Without a model reference epoch, every input series falls back to
+        // "scale only, ignore the epoch". If the boundary/forcing files use a
+        // different epoch from the model clock (the Moana set mixes 1950 and
+        // 2010), the tidal phase is then referenced to the wrong origin and
+        // the constituents come out at an essentially arbitrary phase --
+        // silently, since nothing else notices. Require it explicitly.
+        if (!have_time_ref) {
+            amrex::Error("remora.tides=true requires remora.time_ref (e.g. \"2010-01-01 00:00:00\"): "
+                         "tidal phase is referenced to the model epoch, and without it input files "
+                         "written against a different epoch give an arbitrary tidal phase with no error");
+        }
 
         // ROMS angler, needed to rotate the tidal current ellipses onto the grid
         init_angler_from_netcdf(lev);

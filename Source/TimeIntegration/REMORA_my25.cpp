@@ -258,8 +258,8 @@ REMORA::my25_prestep (int lev, MultiFab* mf_gls, MultiFab* mf_tke,
 
     // my25_prestep.F:396-411 -- tkebc_tile + exchange_w3d_tile.
     for (int icomp=0; icomp<3; icomp++) {
-        FillPatch(lev, t_old[lev], *vec_tke[lev], GetVecOfPtrs(vec_tke), zvel_bc(), BdyVars::null, icomp, false, false);
-        FillPatch(lev, t_old[lev], *vec_gls[lev], GetVecOfPtrs(vec_gls), zvel_bc(), BdyVars::null, icomp, false, false);
+        FillPatch(lev, t_old[lev], *vec_tke[lev], GetVecOfPtrs(vec_tke), tke_bc(), BdyVars::null, icomp, false, false);
+        FillPatch(lev, t_old[lev], *vec_gls[lev], GetVecOfPtrs(vec_gls), tke_bc(), BdyVars::null, icomp, false, false);
     }
 }
 
@@ -760,8 +760,8 @@ REMORA::my25_corrector (int lev, MultiFab* mf_gls, MultiFab* mf_tke,
 
     // my25_corstep.F:755-772 -- tkebc_tile + exchange_w3d_tile
     for (int icomp=0; icomp<3; icomp++) {
-        FillPatch(lev, t_old[lev], *mf_tke, GetVecOfPtrs(vec_tke), zvel_bc(), BdyVars::null, icomp, false, false);
-        FillPatch(lev, t_old[lev], *mf_gls, GetVecOfPtrs(vec_gls), zvel_bc(), BdyVars::null, icomp, false, false);
+        FillPatch(lev, t_old[lev], *mf_tke, GetVecOfPtrs(vec_tke), tke_bc(), BdyVars::null, icomp, false, false);
+        FillPatch(lev, t_old[lev], *mf_gls, GetVecOfPtrs(vec_gls), tke_bc(), BdyVars::null, icomp, false, false);
     }
     for (int icomp=0; icomp<ncons; icomp++) {
         FillPatch(lev, t_old[lev], *mf_Akt, GetVecOfPtrs(vec_Akt), zvel_bc(), BdyVars::null, icomp, false, false);
