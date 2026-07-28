@@ -46,6 +46,7 @@
 #include "REMORA_NCTimeSeries.H"
 #include "REMORA_NCTimeSeriesRiver.H"
 #include "REMORA_NCTimeSeriesBoundary.H"
+#include "REMORA_NCTideData.H"
 #endif
 
 #ifdef REMORA_USE_MOAB
@@ -528,6 +529,16 @@ public:
     /** \brief coriolis factor (2D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_fcor;
 
+    /** \brief grid rotation angle between XI-axis and east [radians] (ROMS angler, 2D) */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_angler;
+
+    /** \brief tidal elevation at rho points [m] (ROMS Etide, 2D) */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_Etide;
+    /** \brief tidal current at u points [m/s] (ROMS Utide, 2D) */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_Utide;
+    /** \brief tidal current at v points [m/s] (ROMS Vtide, 2D) */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_Vtide;
+
     /** \brief x_grid on rho points (2D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_xr;
     /** \brief y_grid on rho points (2D) */
@@ -592,6 +603,9 @@ public:
 
     /** \brief Set everything up for a step on a level */
     void setup_step(int lev, amrex::Real time, amrex::Real dt_lev);
+
+    /** \brief Evaluate barotropic tidal elevation and currents (ROMS set_tides) */
+    void set_tides (int lev, amrex::Real time);
 
     /** \brief 3D advance on a single level */
     void advance_3d_ml (int lev, amrex::Real dt_lev);
@@ -1194,6 +1208,8 @@ public:
     void init_zeta_full_domain_from_netcdf ();
     /** \brief Coriolis parameter data initialization from NetCDF file */
     void init_coriolis_from_netcdf (int lev);
+    /** \brief Grid rotation angle (ROMS angler) initialization from NetCDF grid file */
+    void init_angler_from_netcdf (int lev);
     /** \brief Climatology nudging coefficient initialization from NetCDF file */
     void init_clim_nudg_coeff_from_netcdf (int lev);
     /** \brief Wrapper to initialize climatology nudging coefficient */
@@ -1375,6 +1391,9 @@ private:
 
     /** \brief Vector over BdyVars of boundary series data containers */
     amrex::Vector<amrex::Vector<std::unique_ptr<NCTimeSeriesBoundary>>> boundary_series;
+
+    /** \brief Static tidal constituent data read from the ROMS tide file (level 0 only) */
+    std::unique_ptr<NCTideData> tide_data_from_file;
 
 #endif // REMORA_USE_NETCDF
     /** \brief iMultiFab for river positions; contents are indices of rivers */
@@ -1631,6 +1650,8 @@ private:
     static amrex::Vector<amrex::Vector<std::string>> nc_grid_file;
     /** \brief NetCDF boundary data */
     static amrex::Vector<std::string> nc_bdry_file;
+    /** \brief NetCDF tidal forcing file (ROMS TIDENAME) */
+    std::string nc_tide_file;
 
     /** \brief Which level the high resolution bathymetry is at */
     int hires_grid_level = -1;

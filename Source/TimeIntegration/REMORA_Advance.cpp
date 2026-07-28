@@ -18,6 +18,13 @@ REMORA::Advance (int lev, Real time, Real dt_lev, int /*iteration*/, int /*ncycl
 {
     BL_PROFILE("REMORA::Advance()");
 
+    // ROMS main3d.F calls set_tides once per baroclinic step (after set_data has
+    // interpolated the open-boundary data to time(ng), before step2d). Evaluating it
+    // here, with the same `time` that the boundary data is interpolated to
+    // (t_old[lev]), reproduces that: the tidal signal is frozen across the barotropic
+    // sub-steps, exactly as the ROMS BOUNDARY arrays are.
+    set_tides(lev, time);
+
     setup_step(lev, time, dt_lev);
 
     if (solverChoice.use_barotropic)

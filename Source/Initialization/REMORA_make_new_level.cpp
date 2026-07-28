@@ -470,6 +470,10 @@ void REMORA::resize_stuff(int lev)
     vec_pm.resize(lev+1);
     vec_pn.resize(lev+1);
     vec_fcor.resize(lev+1);
+    vec_angler.resize(lev+1);
+    vec_Etide.resize(lev+1);
+    vec_Utide.resize(lev+1);
+    vec_Vtide.resize(lev+1);
     vec_pm_full_domain.resize(hires_grid_level+1);
     vec_pn_full_domain.resize(hires_grid_level+1);
 
@@ -625,6 +629,22 @@ void REMORA::init_stuff (int lev, const BoxArray& ba, const DistributionMapping&
     vec_pm[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+2,0)));
     vec_pn[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+2,NGROW+1,0)));
     vec_fcor[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+1,0)));
+
+    // ROMS grid rotation angle (angler). Only read from file when tidal forcing is
+    // on -- other grid files are not required to carry an "angle" variable -- so it
+    // defaults to zero (grid XI-axis aligned with east).
+    vec_angler[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+1,0)));
+    vec_angler[lev]->setVal(zero);
+
+    // Tidal elevation (rho points) and tidal currents (u/v points), ROMS set_tides.
+    // These are always allocated (they are small, 2D) but are only ever nonzero when
+    // remora.tides = true.
+    vec_Etide[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+1,0)));
+    vec_Utide[lev].reset(new MultiFab(convert(ba2d,IntVect(1,0,0)),dm,1,IntVect(NGROW,NGROW,0)));
+    vec_Vtide[lev].reset(new MultiFab(convert(ba2d,IntVect(0,1,0)),dm,1,IntVect(NGROW,NGROW,0)));
+    vec_Etide[lev]->setVal(zero);
+    vec_Utide[lev]->setVal(zero);
+    vec_Vtide[lev]->setVal(zero);
 
     vec_xr[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+1,0)));
     vec_yr[lev].reset(new MultiFab(ba2d,dm,1,IntVect(NGROW+1,NGROW+1,0)));
