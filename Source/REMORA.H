@@ -842,6 +842,7 @@ public:
                  const amrex::Array4<amrex::Real const>& z_w,
                  const amrex::Array4<amrex::Real const>& msku,
                  const amrex::Array4<amrex::Real const>& mskv,
+                 const amrex::Array4<amrex::Real const>& Pair,
                  const int nrhs, const int N);
 
     /** \brief Update velocities or tracers with diffusion/viscosity

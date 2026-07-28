@@ -388,6 +388,14 @@ struct SolverChoice {
             amrex::Abort("remora.vstretching must be 4 (Shchepetkin 2010) or 5 (quadratic-spaced variant, ROMS Vstretching=5)");
         }
 
+        // Inverse-barometer surface pressure in the baroclinic PGF
+        // (ROMS ATM_PRESS). Requires Pair forcing, currently only loaded
+        // via the bulk-flux forcing path.
+        pp.queryAdd("atm_press",atm_press);
+        if (atm_press && !(bulk_fluxes || atm2ocn_flux_mode)) {
+            amrex::Abort("remora.atm_press=true requires Pair forcing (remora.bulk_fluxes=true or driver coupling)");
+        }
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -845,6 +853,8 @@ struct SolverChoice {
     amrex::Real tcline  = amrex::Real(150.0);
     // Vertical stretching function selector (ROMS Vstretching): 4 or 5
     int vstretching = 4;
+    // Inverse-barometer surface pressure in the PGF (ROMS ATM_PRESS)
+    bool atm_press = false;
 
     // Linear drag coefficient [m/s]
     amrex::Real rdrag = amrex::Real(3e-4);

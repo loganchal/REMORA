@@ -443,7 +443,13 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
             FC(i,j,k)=zero;
         });
 
-        prsgrd(tbxp1,gbx1,utbx,vtbx,ru,rv,pn,pm,rho,FC,Hz,z_r,z_w,msku,mskv,nrhs,N);
+        if (solverChoice.atm_press && !(vec_Pair[lev] && vec_Pair[lev]->ok())) {
+            amrex::Abort("remora.atm_press=true but no surface air pressure (Pair) forcing is loaded");
+        }
+        const Array4<Real const> Pair_arr = (solverChoice.atm_press) ?
+            vec_Pair[lev]->const_array(mfi) : Array4<Real const>{};
+
+        prsgrd(tbxp1,gbx1,utbx,vtbx,ru,rv,pn,pm,rho,FC,Hz,z_r,z_w,msku,mskv,Pair_arr,nrhs,N);
 
         // Apply mixing to temperature and, if use_salt, salt
         int ncomp = solverChoice.use_salt ? 2 : 1;

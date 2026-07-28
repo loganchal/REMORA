@@ -35,6 +35,7 @@ REMORA::prsgrd (const Box& phi_bx, const Box& phi_gbx,
                const Array4<Real const>& z_w,
                const Array4<Real const>& msku,
                const Array4<Real const>& mskv,
+               const Array4<Real const>& Pair,
                const int nrhs, const int N)
 {
     BL_PROFILE("REMORA::prsgrd()");
@@ -55,6 +56,12 @@ REMORA::prsgrd (const Box& phi_bx, const Box& phi_gbx,
     Real GRho     = g/solverChoice.rho0;
     Real GRho0    = Real(1000.0) * GRho;
     Real HalfGRho = Real(0.5)    * GRho;
+
+    // Inverse-barometer surface pressure forcing (ROMS ATM_PRESS,
+    // prsgrd32.h): P(N) += (100/rho0)*(Pair - OneAtm), Pair in millibar.
+    const bool local_atm_press = solverChoice.atm_press && Pair;
+    const Real OneAtm   = Real(1013.25);
+    const Real fac_pair = Real(100.0)/solverChoice.rho0;
 
     int ncomp = 0;
     int P_comp = ncomp++;
@@ -107,7 +114,11 @@ REMORA::prsgrd (const Box& phi_bx, const Box& phi_gbx,
         Real cff1=one/(z_r(i,j,N)-z_r(i,j,N-1));
         Real cff2=Real(0.5)*(rho(i,j,N)-rho(i,j,N-1))*(z_w(i,j,N+1)-z_r(i,j,N))*cff1;
 
-        P(i,j,N)=GRho0*z_w(i,j,N+1)+GRho*(rho(i,j,N)+cff2)*(z_w(i,j,N+1)-z_r(i,j,N));
+        Real Psurf = GRho0*z_w(i,j,N+1);
+        if (local_atm_press) {
+            Psurf += fac_pair*(Pair(i,j,0)-OneAtm);
+        }
+        P(i,j,N)=Psurf+GRho*(rho(i,j,N)+cff2)*(z_w(i,j,N+1)-z_r(i,j,N));
 
         for (int k=N-1;k>=0;k--)
         {
