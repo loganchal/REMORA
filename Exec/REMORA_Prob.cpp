@@ -42,8 +42,11 @@ void Problem::init_analytic_bathymetry (
                 (my_prob_name_ci == "coupletoerf")    ||
                 (my_prob_name_ci == "dogbone")        ||
                 (my_prob_name_ci == "idealminigrid")  ||
+                (my_prob_name_ci == "moana")          ||
                 (my_prob_name_ci == "idealminiriv") ) {
 // No initialization of bathymetry occurs with these prob_name's
+// (moana: everything -- bathymetry, grid metrics, masks, Coriolis, angle --
+//  is read from the ROMS nz5km grid file)
 
     } else if (my_prob_name_ci == "boundarylayer") {
 #include "Prob/REMORA_InitAnalyticBathymetry_BoundaryLayer.H"

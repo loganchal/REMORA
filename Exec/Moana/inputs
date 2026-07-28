@@ -1,0 +1,151 @@
+# =====================================================================
+#  Moana Hindcast (NZ 5 km) — REMORA configuration
+#
+#  Reproduces the Moana Project hindcast ROMS 3.9 setup
+#  (Souza et al. 2023) as configured in
+#  external/moana_hindcast/configuration/{roms3d.h,roms.in}.
+#  Every setting below is traceable to that pair; see
+#  Tests/MoanaParity/inputs.moana_gates for the parity-critical subset
+#  and the atlas repo's docs/gpu_port_parity_ledger.md for the audits.
+#
+#  Grid: Lm x Mm x N = 395 x 465 x 50  =>  rho dims 397 x 467
+#  REMORA n_cell counts interior cells: 395 x 465 x 50.
+# =====================================================================
+
+remora.prob_name = Moana
+
+# ---------------------------------------------------------------- run
+remora.max_step = 100
+
+# -------------------------------------------- problem size & geometry
+# Horizontal extent is carried by the curvilinear grid file (pm/pn);
+# prob_lo/hi only set the vertical range and a nominal horizontal box.
+remora.n_cell      = 395 465 50
+remora.prob_lo     = 0.      0.      -5000.
+remora.prob_hi     = 1975000. 2325000.    0.
+remora.is_periodic = 0 0 0
+
+# Boundaries: roms.in:183-192 — zeta Cha(pman), ubar/vbar Fla(ther),
+# 3D T/S/u/v RadNud on all four edges, TKE zero-gradient (Gra).
+remora.boundary_per_variable = 1
+##                      WEST              SOUTH             EAST              NORTH
+remora.bc.temp.type   =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
+remora.bc.salt.type   =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
+remora.bc.u.type      =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
+remora.bc.v.type      =  orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg orlanski_rad_nudg
+remora.bc.ubar.type   =  flather           flather           flather           flather
+remora.bc.vbar.type   =  flather           flather           flather           flather
+remora.bc.zeta.type   =  chapman           chapman           chapman           chapman
+remora.bc.tke.type    =  outflow           outflow           outflow           outflow
+
+# ------------------------------------------------- time step control
+remora.fixed_dt            = 100.0   # roms.in:225  DT
+remora.fixed_ndtfast_ratio = 44      # roms.in:226  NDTFAST
+
+remora.flat_bathymetry = 0           # never set true (see ledger)
+
+# --------------------------------------------------- vertical grid
+# roms.in:415-416 Vtransform=2, Vstretching=5; THETA_S/B, TCLINE
+remora.vstretching = 5
+remora.theta_s     = 6.0
+remora.theta_b     = 2.0
+remora.tcline      = 250.0
+
+# ------------------------------------------------------- advection
+# roms.in Hadvection == SU3 compiles to pure centered-4 in this build
+# (TS_U3ADV_SPLIT undefined) -- see ledger "tracer advection" audit.
+remora.tracer_horizontal_advection_scheme = "centered4"
+remora.uv_horizontal_advection_scheme     = "upstream3"
+
+# ------------------------------------------------ equation of state
+remora.eos_type = "nonlinear"        # roms3d.h NONLIN_EOS
+remora.rho0     = 1025.0             # roms.in:426
+
+# --------------------------------------------------- vertical mixing
+# roms3d.h MY25_MIXING + KANTHA_CLAYSON + N2S2_HORAVG
+remora.vertical_mixing_type = "MY25"
+remora.Akv_bak = 1.0e-5              # roms.in AKV_BAK
+remora.Akt_bak = 1.0e-5              # roms.in AKT_BAK
+
+# ------------------------------------------------- horizontal mixing
+# roms3d.h TS_DIF2 + MIX_ISO_TS (isoneutral), UV_VIS2 + MIX_S_UV
+remora.horizontal_mixing_type = "constant"
+remora.harmonic_mixing_type   = "isopycnal"
+remora.visc2     = 5.0               # roms.in VISC2
+remora.tnu2_temp = 25.0              # roms.in TNU2
+remora.tnu2_salt = 25.0
+
+# ------------------------------------------------------ bottom drag
+remora.bottom_stress_type = "quadratic"   # roms3d.h UV_QDRAG
+remora.rdrag2 = 1.0e-3                    # roms.in RDRG2
+
+# ---------------------------------------------------------- coriolis
+remora.use_coriolis  = true
+remora.coriolis_type = netcdf             # f from the grid file
+
+# ------------------------------------------------- surface forcing
+# roms3d.h BULK_FLUXES + LONGWAVE_OUT + EMINUSP + ATM_PRESS
+#          + PRESS_COMPENSATE + SOLAR_SOURCE
+remora.bulk_fluxes         = true
+remora.qair_is_percent     = true    # Moana Qair is % RH (see bulk-flux audit)
+remora.blk_ZW              = 10.0    # roms.in BLK_ZW
+remora.blk_ZT              = 2.0     # roms.in BLK_ZT  (REMORA default 10!)
+remora.blk_ZQ              = 2.0     # roms.in BLK_ZQ  (REMORA default 10!)
+remora.longwave_down       = true
+remora.eminusp_type        = computed
+remora.eminusp_correct_ssh = false
+remora.atm_press           = true
+remora.press_compensate    = true
+remora.solar_source        = true
+remora.jerlov_water_type   = 1       # roms.in WTYPE
+
+# ------------------------------------------------------------ tides
+# roms3d.h SSH_TIDES + UV_TIDES + ADD_FSOBC + ADD_M2OBC
+remora.tides      = true
+remora.tide_start = 0.0              # roms.in TIDE_START (days)
+
+# ----------------------------------------------------------- rivers
+# roms.in LuvSrc=T, LtracerSrc=T T
+remora.do_rivers       = true
+remora.do_rivers_temp  = true
+remora.do_rivers_salt  = true
+
+# ------------------------------------------- climatology nudging
+# roms.in Lm2CLM=F; Lm3CLM=T; LtracerCLM=T T; LnudgeM3CLM=T; LnudgeTCLM=T T
+# Timescales TNUDG/M3NUDG = 1 day, spatial ramp from nz5km_nudg_N50.nc
+remora.do_m2_clim_nudg   = false
+remora.do_m3_clim_nudg   = true
+remora.do_temp_clim_nudg = true
+remora.do_salt_clim_nudg = true
+remora.tnudg             = 1.0
+
+# ------------------------------------------------------------ input
+remora.ic_type = "netcdf"
+remora.nc_grid_file_0 = "nz5km_grd.nc"
+remora.nc_init_file_0 = "nz5km_ini_20210101.nc"
+remora.nc_init_record = -1           # ROMS NRREC=-1: last record
+remora.init_ubar_from_file = true    # ROMS non-PERFECT_RESTART set
+
+remora.nc_bdry_file     = "nz5km_N50_bnd_202101.nc"
+remora.nc_frc_file      = "nz5km_N50_meteo_202101.nc"
+remora.nc_tide_file     = "nz5km-tide.nc"
+remora.nc_river_file    = "nz5km_N50_rivers.nc"
+remora.nc_clim_his_file = "nz5km_N50_clim_202101.nc"
+remora.nc_clim_coeff_file = "nz5km_nudg_N50.nc"
+
+# ----------------------------------------------------------- output
+# ROMS-schema NetCDF so the existing atlas pipeline reads it unchanged.
+# roms.in: NHIS=36 (hourly at DT=100), NAVG=864 (daily)
+remora.plotfile_type      = netcdf
+remora.write_history_file = 1
+remora.plot_file          = nz5km_his
+remora.plot_int           = 36
+remora.plot_vars_3d       = salt temp x_velocity y_velocity
+remora.plot_vars_2d       = zeta ubar vbar
+
+remora.check_file = chk
+remora.check_int  = 864
+
+# ------------------------------------------------------- diagnostics
+remora.sum_interval = 36
+remora.v            = 1
