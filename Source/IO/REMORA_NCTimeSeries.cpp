@@ -122,9 +122,22 @@ void NCTimeSeries::update_interpolated_to_time (amrex::Real time, int lev,
                                                 amrex::MultiFab* mf_lev,
                                                 const amrex::Vector<amrex::Geometry>& geom,
                                                 const amrex::Vector<amrex::IntVect>& ref_ratio) {
-    // Figure out time index:
-    AMREX_ASSERT(time >= ocean_times[0]);
-    AMREX_ASSERT(time <= ocean_times[ocean_times.size()-1]);
+    // Figure out time index.
+    //
+    // These MUST be hard checks, not AMREX_ASSERT: asserts compile out of a
+    // release build, and when the model time falls outside the series the
+    // bracketing loop below never fires, leaving i_time_before at its -100
+    // sentinel and reading far out of bounds. A mismatched forcing epoch or a
+    // run window the file does not cover would then produce garbage silently.
+    if (time < ocean_times[0] || time > ocean_times[ocean_times.size()-1]) {
+        amrex::Print() << "Model time " << time << " s is outside the range of "
+                       << field_name << " in its forcing file ("
+                       << ocean_times[0] << " .. "
+                       << ocean_times[ocean_times.size()-1] << " s).\n"
+                       << "Check remora.start_time, remora.time_ref, and that the "
+                       << "file covers the run window.\n";
+        amrex::Abort("Forcing time out of range for " + field_name);
+    }
     int i_time_before_old = i_time_before;
     for (int nt=0; nt < ocean_times.size()-1; nt++) {
         if ((ocean_times[nt] <= time) and (ocean_times[nt+1] >= time)) {

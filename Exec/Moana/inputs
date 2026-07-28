@@ -31,7 +31,7 @@ remora.start_time = 347155200
 # Horizontal extent is carried by the curvilinear grid file (pm/pn);
 # prob_lo/hi only set the vertical range and a nominal horizontal box.
 remora.n_cell      = 395 465 50
-remora.prob_lo     = 0.      0.      -5000.
+remora.prob_lo     = 0.      0.      -6000.   # max(h) on nz5km_grd.nc is ~6000 m
 remora.prob_hi     = 1975000. 2325000.    0.
 remora.is_periodic = 0 0 0
 
@@ -95,6 +95,11 @@ remora.rdrag2 = 1.0e-3                    # roms.in RDRG2
 remora.use_coriolis  = true
 remora.coriolis_type = netcdf             # f from the grid file
 
+# CURVGRID (roms3d.h). REMORA defaults this FALSE, which silently drops the
+# dndx/dmde curvilinear metric terms from momentum advection. The nz5km grid
+# is genuinely curvilinear (non-zero angle, dmde, dndx), so this is required.
+remora.use_curvilinear_grid = true
+
 # ------------------------------------------------- surface forcing
 # roms3d.h BULK_FLUXES + LONGWAVE_OUT + EMINUSP + ATM_PRESS
 #          + PRESS_COMPENSATE + SOLAR_SOURCE
@@ -140,8 +145,8 @@ remora.tides      = true
 remora.tide_start = 0.0              # roms.in TIDE_START (days)
 
 # ----------------------------------------------------------- rivers
-# roms.in LuvSrc=T, LtracerSrc=T T
-remora.do_rivers       = true
+# roms.in LuvSrc=T, LtracerSrc=T T. Enabled together with nc_river_file below
+# once a river file covering the run window exists (see the note there).
 remora.do_rivers_temp  = true
 remora.do_rivers_salt  = true
 
@@ -153,20 +158,53 @@ remora.do_m3_clim_nudg   = true
 remora.do_temp_clim_nudg = true
 remora.do_salt_clim_nudg = true
 remora.tnudg             = 1.0
+# roms.in M3NUDG = 1.0 day. REMORA defaults to 0, which silently disables 3D
+# momentum boundary nudging entirely.
+remora.m3nudg            = 1.0
+# roms.in OBCFAC = 10.0. REMORA defaults to 0, and tau = nudg_coeff*obcfac*dt,
+# so leaving it unset silently switches off inflow (active) nudging on every
+# RadNud boundary -- the open boundaries become pure radiation with no data
+# constraint on inflow.
+remora.obcfac            = 10.0
+
+# roms.in GLS_KMIN / GLS_PMIN. REMORA reads these under MY25 as the tke and
+# length-scale floors; its defaults (7.6e-6 / 1.0e-12) are not Moana's.
+remora.gls_Kmin          = 5.0e-6
+remora.gls_Pmin          = 1.0e-8
 
 # ------------------------------------------------------------ input
 remora.ic_type = "netcdf"
 remora.nc_grid_file_0 = "nz5km_grd.nc"
 remora.nc_init_file_0 = "nz5km_ini_20210101.nc"
-remora.nc_init_record = -1           # ROMS NRREC=-1: last record
+remora.nc_init_record = -1           # last record (the ini file has one)
 remora.init_ubar_from_file = true    # ROMS non-PERFECT_RESTART set
 
 remora.nc_bdry_file     = "nz5km_N50_bnd_202101.nc"
 remora.nc_frc_file      = "nz5km_N50_meteo_202101.nc"
 remora.nc_tide_file     = "nz5km-tide.nc"
-remora.nc_river_file    = "nz5km_N50_rivers.nc"
 remora.nc_clim_his_file = "nz5km_N50_clim_202101.nc"
 remora.nc_clim_coeff_file = "nz5km_nudg_N50.nc"
+
+# The boundary and climatology files carry their own time coordinates
+# (and their own 1950 epoch, reconciled by remora.time_ref above).
+remora.bdy_time_varname       = bry_time
+remora.clim_ubar_time_varname = clim_time
+remora.clim_vbar_time_varname = clim_time
+remora.clim_u_time_varname    = clim_time
+remora.clim_v_time_varname    = clim_time
+remora.clim_temp_time_varname = clim_time
+remora.clim_salt_time_varname = clim_time
+
+# NOTE ON RIVERS: neither available river file covers 2021-01 --
+# EVENT_9798_RYF2013_FULL/.../nz5km_N50_rivers.nc spans 2013-05..2014-06, and
+# Extension_Run/inputs/nz5km_N50_rivers.nc is a day-of-year climatology that
+# relies on ROMS cyclic-time handling, which REMORA does not implement. Rivers
+# are therefore OFF for this smoke run; a Moana-faithful production run needs
+# either a rivers file spanning the window or cyclic-time support in
+# NCTimeSeriesRiver. (Rivers are not a leading term for the ML budget, but the
+# configuration is not complete without them.)
+remora.do_rivers = false
+#remora.nc_river_file = "nz5km_N50_rivers.nc"
 
 # ----------------------------------------------------------- output
 # ROMS-schema NetCDF so the existing atlas pipeline reads it unchanged.
