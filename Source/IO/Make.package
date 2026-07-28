@@ -17,4 +17,6 @@ ifeq ($(USE_PNETCDF), TRUE)
   CEXE_sources += REMORA_NCTimeSeries.cpp
   CEXE_sources += REMORA_NCTimeSeriesRiver.cpp
   CEXE_sources += REMORA_NCTimeSeriesBoundary.cpp
+  CEXE_sources += REMORA_NCTideData.cpp
+  CEXE_headers += REMORA_NCTideData.H
 endif

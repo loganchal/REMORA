@@ -403,6 +403,19 @@ struct SolverChoice {
             amrex::Abort("remora.press_compensate=true requires remora.atm_press=true (ROMS couples PRESS_COMPENSATE to ATM_PRESS)");
         }
 
+        // Barotropic tidal forcing at the open boundaries (ROMS SSH_TIDES +
+        // UV_TIDES with ADD_FSOBC + ADD_M2OBC). The harmonic constants come from
+        // remora.nc_tide_file; the tidal elevation and currents are ADDED to the
+        // zeta/ubar/vbar open-boundary data every baroclinic step.
+        pp.queryAdd("tides",use_tides);
+        // Reference time origin for tidal forcing [days] (ROMS TIDE_START)
+        pp.queryAdd("tide_start",tide_start);
+#ifndef REMORA_USE_NETCDF
+        if (use_tides) {
+            amrex::Abort("remora.tides=true requires a NetCDF-enabled build (tidal constants are read from remora.nc_tide_file)");
+        }
+#endif
+
         // Shortwave penetration into the water column (ROMS SOLAR_SOURCE):
         // two-band Paulson & Simpson (1977) decay by Jerlov water type.
         // Without this the entire shortwave flux heats the top model cell.
@@ -905,6 +918,11 @@ struct SolverChoice {
     int nc_init_record = 0;
     // Also read ubar/vbar from the init file (ROMS non-PERFECT_RESTART set)
     bool init_ubar_from_file = false;
+
+    // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
+    // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
+    bool use_tides = false;
+    amrex::Real tide_start = zero;
 
     // Linear drag coefficient [m/s]
     amrex::Real rdrag = amrex::Real(3e-4);

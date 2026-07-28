@@ -50,6 +50,46 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     const Real eps= Real(1.0e-20);
     const bool null_mf_calc = (!mf_calc.ok());
 
+    // ------------------------------------------------------------------------
+    // Tidal forcing (ROMS ADD_FSOBC / ADD_M2OBC, set_tides.F lines 704-770 and
+    // 849-931): the tidal elevation and tidal currents are ADDED to the
+    // free-surface and 2D momentum open-boundary values that were just
+    // interpolated from the boundary file. Only zeta, ubar and vbar are affected.
+    //
+    // The addition is done where the boundary value is consumed rather than by
+    // mutating the stored interpolated data, so that repeated calls within a step
+    // cannot accumulate tide on tide.
+    //
+    // Index map (ROMS -> REMORA, both rho and u/v indices shift by -1):
+    //   zeta_west (j)  += 0.5*(Etide(Istr-1,j) + Etide(Istr  ,j)) -> 0.5*(E(dlo.x-1,j)+E(dlo.x  ,j))
+    //   zeta_east (j)  += 0.5*(Etide(Iend  ,j) + Etide(Iend+1,j)) -> 0.5*(E(dhi.x  ,j)+E(dhi.x+1,j))
+    //   zeta_south(i)  += 0.5*(Etide(i,Jstr-1) + Etide(i,Jstr  )) -> 0.5*(E(i,dlo.y-1)+E(i,dlo.y  ))
+    //   zeta_north(i)  += 0.5*(Etide(i,Jend  ) + Etide(i,Jend+1)) -> 0.5*(E(i,dhi.y  )+E(i,dhi.y+1))
+    //   ubar_west (j)  += Utide(Istr  ,j)      -> Utide(dlo.x  ,j)   [western u face]
+    //   ubar_east (j)  += Utide(Iend+1,j)      -> Utide(dhi.x+1,j)   [eastern u face]
+    //   ubar_south(i)  += Utide(i,Jstr-1)      -> Utide(i,dlo.y-1)   [u row below domain]
+    //   ubar_north(i)  += Utide(i,Jend+1)      -> Utide(i,dhi.y+1)   [u row above domain]
+    //   vbar_west (j)  += Vtide(Istr-1,j)      -> Vtide(dlo.x-1,j)   [v column west of domain]
+    //   vbar_east (j)  += Vtide(Iend+1,j)      -> Vtide(dhi.x+1,j)   [v column east of domain]
+    //   vbar_south(i)  += Vtide(i,Jstr  )      -> Vtide(i,dlo.y  )   [southern v face]
+    //   vbar_north(i)  += Vtide(i,Jend+1)      -> Vtide(i,dhi.y+1)   [northern v face]
+    // where dlo/dhi are the bounds of the CELL-CENTERED domain.
+    //
+    // The Flather condition for ubar/vbar also consumes the boundary free surface,
+    // which in ROMS is the same (tide-carrying) BOUNDARY%zeta_* array, so the same
+    // zeta tide is added to bry_val_zeta.
+    // ------------------------------------------------------------------------
+    const bool do_tides   = solverChoice.use_tides;
+    const bool tide_zeta  = do_tides && (bccomp == zeta_bc());
+    const bool tide_ubar  = do_tides && (bccomp == ubar_bc());
+    const bool tide_vbar  = do_tides && (bccomp == vbar_bc());
+    const bool add_tides  = tide_zeta || tide_ubar || tide_vbar;
+
+    // Bounds of the cell-centered domain (note: `domain` above has been converted
+    // to the nodality of the variable being filled)
+    const auto& dlo = amrex::lbound(geom[lev].Domain());
+    const auto& dhi = amrex::ubound(geom[lev].Domain());
+
     for (int icomp = 0; icomp < ncomp; icomp++) // This is to do both temp and salt if doing scalars
     {
         // If we're doing zeta, ubar, or vbar, then calc_arr only has a single component
@@ -153,6 +193,11 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             const Array4<const Real>& msku = vec_msku[lev]->const_array(mfi);
             const Array4<const Real>& mskv = vec_mskv[lev]->const_array(mfi);
 
+            // Tidal elevation / currents for this box (zero unless remora.tides)
+            const Array4<const Real>& Etide = vec_Etide[lev]->const_array(mfi);
+            const Array4<const Real>& Utide = vec_Utide[lev]->const_array(mfi);
+            const Array4<const Real>& Vtide = vec_Vtide[lev]->const_array(mfi);
+
             // ROMS PRESS_COMPENSATE (u2dbc_im.F/v2dbc_im.F): the Flather
             // condition compares interior zeta corrected by the inverse
             // barometer, fac*(Pair_a+Pair_b - 2*OneAtm), against the
@@ -185,11 +230,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             if (!xlo.isEmpty() && apply_west) {
                 ParallelFor(grow(xlo_edge,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
-                    Real bry_val = bdatxlo(ubound(xlo).x,j,k,0);
+                    // ROMS set_tides.f90:704-719 (zeta_west), 849-868 (ubar/vbar_west)
+                    Real tide_zeta_val = add_tides ?
+                        Real(0.5) * (Etide(dlo.x-1,j,0) + Etide(dlo.x,j,0)) : zero;
+                    Real tide_val = tide_zeta ? tide_zeta_val :
+                                   (tide_ubar ? Utide(dlo.x  ,j,0) :
+                                   (tide_vbar ? Vtide(dlo.x-1,j,0) : zero));
+
+                    Real bry_val = bdatxlo(ubound(xlo).x,j,k,0) + tide_val;
                     if (bcr.lo(0) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.lo(0) == REMORABCType::flather) {
-                        Real bry_val_zeta = bdatxlo_zeta(ubound(xlo).x-1,j,k,0);
+                        Real bry_val_zeta = bdatxlo_zeta(ubound(xlo).x-1,j,k,0) + tide_zeta_val;
                         Real cff = one / (Real(0.5) * (h_arr(dom_lo.x-1,j,0) + zeta_arr(dom_lo.x-1,j,0,icomp_calc)
                                                      + h_arr(dom_lo.x,j,0) + zeta_arr(dom_lo.x,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
@@ -248,11 +300,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             if (!xhi.isEmpty() && apply_east) {
                 ParallelFor(grow(xhi_edge,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
-                    Real bry_val = bdatxhi(lbound(xhi).x,j,k,0);
+                    // ROMS set_tides.f90:721-736 (zeta_east), 870-889 (ubar/vbar_east)
+                    Real tide_zeta_val = add_tides ?
+                        Real(0.5) * (Etide(dhi.x,j,0) + Etide(dhi.x+1,j,0)) : zero;
+                    Real tide_val = tide_zeta ? tide_zeta_val :
+                                   (tide_ubar ? Utide(dhi.x+1,j,0) :
+                                   (tide_vbar ? Vtide(dhi.x+1,j,0) : zero));
+
+                    Real bry_val = bdatxhi(lbound(xhi).x,j,k,0) + tide_val;
                     if (bcr.hi(0) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(0) == REMORABCType::flather) {
-                        Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x,j,k,0);
+                        Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x,j,k,0) + tide_zeta_val;
                         Real cff = one / (Real(0.5) * (h_arr(dom_hi.x-1,j,0) + zeta_arr(dom_hi.x-1,j,0,icomp_calc)
                                                      + h_arr(dom_hi.x,j,0) + zeta_arr(dom_hi.x,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
@@ -312,11 +371,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             if (!ylo.isEmpty() && apply_south) {
                 ParallelFor(grow(ylo_edge,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
-                    Real bry_val = bdatylo(i,ubound(ylo).y,k,0);
+                    // ROMS set_tides.f90:738-753 (zeta_south), 891-910 (ubar/vbar_south)
+                    Real tide_zeta_val = add_tides ?
+                        Real(0.5) * (Etide(i,dlo.y-1,0) + Etide(i,dlo.y,0)) : zero;
+                    Real tide_val = tide_zeta ? tide_zeta_val :
+                                   (tide_ubar ? Utide(i,dlo.y-1,0) :
+                                   (tide_vbar ? Vtide(i,dlo.y  ,0) : zero));
+
+                    Real bry_val = bdatylo(i,ubound(ylo).y,k,0) + tide_val;
                     if (bcr.lo(1) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.lo(1) == REMORABCType::flather) {
-                        Real bry_val_zeta = bdatylo_zeta(i,ubound(ylo).y-1,k,0);
+                        Real bry_val_zeta = bdatylo_zeta(i,ubound(ylo).y-1,k,0) + tide_zeta_val;
                         Real cff = one / (Real(0.5) * (h_arr(i,dom_lo.y-1,0) + zeta_arr(i,dom_lo.y-1,0,icomp_calc)
                                                      + h_arr(i,dom_lo.y,0) + zeta_arr(i,dom_lo.y,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);
@@ -376,11 +442,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             if (!yhi.isEmpty() && apply_north) {
                 ParallelFor(grow(yhi_edge,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
-                    Real bry_val = bdatyhi(i,lbound(yhi).y,k,0);
+                    // ROMS set_tides.f90:755-770 (zeta_north), 912-931 (ubar/vbar_north)
+                    Real tide_zeta_val = add_tides ?
+                        Real(0.5) * (Etide(i,dhi.y,0) + Etide(i,dhi.y+1,0)) : zero;
+                    Real tide_val = tide_zeta ? tide_zeta_val :
+                                   (tide_ubar ? Utide(i,dhi.y+1,0) :
+                                   (tide_vbar ? Vtide(i,dhi.y+1,0) : zero));
+
+                    Real bry_val = bdatyhi(i,lbound(yhi).y,k,0) + tide_val;
                     if (bcr.hi(1) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(1) == REMORABCType::flather) {
-                        Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y,k,0);
+                        Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y,k,0) + tide_zeta_val;
                         Real cff = one / (Real(0.5) * (h_arr(i,dom_hi.y-1,0) + zeta_arr(i,dom_hi.y-1,0,icomp_calc)
                                                      + h_arr(i,dom_hi.y,0) + zeta_arr(i,dom_hi.y,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);

@@ -36,6 +36,8 @@ function(build_remora_lib remora_lib_name)
                    ${SRC_DIR}/IO/REMORA_NCTimeSeries.cpp
                    ${SRC_DIR}/IO/REMORA_NCTimeSeriesRiver.cpp
                    ${SRC_DIR}/IO/REMORA_NCTimeSeriesBoundary.cpp
+                   ${SRC_DIR}/IO/REMORA_NCTideData.H
+                   ${SRC_DIR}/IO/REMORA_NCTideData.cpp
                    ${SRC_DIR}/IO/REMORA_ReadFromInitNetcdf.cpp
                    ${SRC_DIR}/BoundaryConditions/REMORA_BoundaryConditions_netcdf.cpp
                    ${SRC_DIR}/Initialization/REMORA_init_from_netcdf.cpp)
@@ -132,6 +134,7 @@ function(build_remora_lib remora_lib_name)
        ${SRC_DIR}/TimeIntegration/REMORA_TimeStep.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_TimeStepML.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_set_weights.cpp
+       ${SRC_DIR}/TimeIntegration/REMORA_set_tides.cpp
   )
 
   # Example executables rely on Source/main.cpp for the process entry point

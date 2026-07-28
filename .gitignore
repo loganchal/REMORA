@@ -46,6 +46,7 @@ d/
 f/
 t/
 tmp_build_dir/
+build_tides/
 AMReX_buildInfo.cpp
 
 Backtrace.*

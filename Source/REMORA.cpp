@@ -1358,6 +1358,36 @@ REMORA::init_only (int lev, Real time)
         amrex::Print() << "Boundary data loaded from netcdf file \n " << std::endl;
     }
 
+    // Tidal forcing (ROMS SSH_TIDES/UV_TIDES). The harmonic constants and the grid
+    // rotation angle are time-invariant, so both are read exactly once, at level 0.
+    if (solverChoice.use_tides && lev == 0) {
+        if (nc_tide_file.empty()) {
+            amrex::Error("NetCDF tide file name (remora.nc_tide_file) must be provided when remora.tides=true");
+        }
+        if (!solverChoice.boundary_from_netcdf) {
+            amrex::Error("remora.tides=true requires NetCDF open-boundary data: the tidal signal is ADDED to the boundary zeta/ubar/vbar (ROMS ADD_FSOBC/ADD_M2OBC)");
+        }
+        if (solverChoice.ic_type != IC_Type::netcdf) {
+            amrex::Error("remora.tides=true requires remora.ic_bc_type=netcdf (the grid angle is read from remora.nc_grid_file_0)");
+        }
+        if (max_level > 0) {
+            amrex::Error("remora.tides=true is currently only supported for single-level runs");
+        }
+
+        // ROMS angler, needed to rotate the tidal current ellipses onto the grid
+        init_angler_from_netcdf(lev);
+
+        BoxList bl2d = grids[lev].boxList();
+        for (auto& b : bl2d) {
+            b.setRange(2,0);
+        }
+        BoxArray ba2d(std::move(bl2d));
+
+        tide_data_from_file.reset(new NCTideData(nc_tide_file, geom[lev].Domain()));
+        tide_data_from_file->Initialize(ba2d, dmap[lev], IntVect(NGROW+1,NGROW+1,0), geom[lev]);
+        amrex::Print() << "Tidal forcing data loaded from netcdf file \n " << std::endl;
+    }
+
     // This will be a non-op if forcings specified analytically
     if (solverChoice.smflux_type == SMFluxType::netcdf) {
         if (lev==0) {
@@ -1763,6 +1793,9 @@ REMORA::ReadParameters ()
 
     // We only read boundary data at level 0
     pp.queryarr("nc_bdry_file", nc_bdry_file);
+
+    // Tidal forcing constants (ROMS TIDENAME); read once, level 0 only
+    pp.queryAdd("nc_tide_file", nc_tide_file);
 
     // Also only read forcings at level 0 (for now)
     if (pp.contains("nc_frc_file")) {
