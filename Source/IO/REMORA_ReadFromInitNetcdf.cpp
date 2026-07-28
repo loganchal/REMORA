@@ -19,9 +19,17 @@ read_data_from_netcdf (int /*lev*/,
                        const Box& domain,
                        const std::string& fname,
                        FArrayBox& NC_temp_fab, FArrayBox& NC_salt_fab,
-                       FArrayBox& NC_xvel_fab, FArrayBox& NC_yvel_fab)
+                       FArrayBox& NC_xvel_fab, FArrayBox& NC_yvel_fab,
+                       int init_record)
 {
-    amrex::Print() << "Loading initial solution data from NetCDF file " << fname << std::endl;
+    // Resolve ROMS NRREC semantics: negative means "last record in file".
+    const int nrec = get_num_time_records(fname, "temp");
+    const int rec  = (init_record < 0) ? nrec + init_record : init_record;
+    if (rec < 0 || rec >= nrec) {
+        amrex::Abort("remora.nc_init_record out of range for " + fname);
+    }
+    amrex::Print() << "Loading initial solution data from NetCDF file " << fname
+                   << " (record " << rec << " of " << nrec << ")" << std::endl;
 
     Vector<FArrayBox*> NC_fabs;
     Vector<std::string> NC_names;
@@ -33,7 +41,45 @@ read_data_from_netcdf (int /*lev*/,
     NC_fabs.push_back(&NC_yvel_fab); NC_names.push_back("v");        NC_dim_types.push_back(NC_Data_Dims_Type::Time_BT_SN_WE); // 3
 
     // Read the netcdf file and fill these FABs
-    BuildFABsFromNetCDFFile<FArrayBox,Real>(domain, fname, NC_names, NC_dim_types, NC_fabs);
+    BuildFABsFromNetCDFFile<FArrayBox,Real>(domain, fname, NC_names, NC_dim_types, NC_fabs,
+                                            true, rec);
+}
+
+/**
+ * Read the barotropic velocity components of a ROMS his/rst record.
+ * ROMS without PERFECT_RESTART initializes from zeta/ubar/vbar/u/v/temp/salt,
+ * so a hot start needs ubar/vbar as well as the 3D state.
+ *
+ * @param domain          simulation domain
+ * @param fname           file name to read from
+ * @param NC_ubar_fab     container for 2D x-velocity data
+ * @param NC_vbar_fab     container for 2D y-velocity data
+ * @param init_record     record index; negative counts back from the end
+ */
+void
+read_ubar_from_netcdf (int /*lev*/,
+                       const Box& domain,
+                       const std::string& fname,
+                       FArrayBox& NC_ubar_fab, FArrayBox& NC_vbar_fab,
+                       int init_record)
+{
+    const int nrec = get_num_time_records(fname, "ubar");
+    const int rec  = (init_record < 0) ? nrec + init_record : init_record;
+    if (rec < 0 || rec >= nrec) {
+        amrex::Abort("remora.nc_init_record out of range for ubar in " + fname);
+    }
+    amrex::Print() << "Loading initial barotropic velocity from NetCDF file " << fname
+                   << " (record " << rec << ")" << std::endl;
+
+    Vector<FArrayBox*> NC_fabs;
+    Vector<std::string> NC_names;
+    Vector<enum NC_Data_Dims_Type> NC_dim_types;
+
+    NC_fabs.push_back(&NC_ubar_fab); NC_names.push_back("ubar"); NC_dim_types.push_back(NC_Data_Dims_Type::Time_SN_WE);
+    NC_fabs.push_back(&NC_vbar_fab); NC_names.push_back("vbar"); NC_dim_types.push_back(NC_Data_Dims_Type::Time_SN_WE);
+
+    BuildFABsFromNetCDFFile<FArrayBox,Real>(domain, fname, NC_names, NC_dim_types, NC_fabs,
+                                            true, rec);
 }
 
 /**
@@ -79,9 +125,16 @@ void
 read_zeta_from_netcdf (int /*lev*/,
                       const Box& domain,
                       const std::string& fname,
-                      FArrayBox& NC_zeta_fab)
+                      FArrayBox& NC_zeta_fab,
+                      int init_record)
 {
-    amrex::Print() << "Loading initial sea surface height from NetCDF file " << fname << std::endl;
+    const int nrec = get_num_time_records(fname, "zeta");
+    const int rec  = (init_record < 0) ? nrec + init_record : init_record;
+    if (rec < 0 || rec >= nrec) {
+        amrex::Abort("remora.nc_init_record out of range for zeta in " + fname);
+    }
+    amrex::Print() << "Loading initial sea surface height from NetCDF file " << fname
+                   << " (record " << rec << ")" << std::endl;
 
     Vector<FArrayBox*> NC_fabs;
     Vector<std::string> NC_names;
@@ -90,7 +143,8 @@ read_zeta_from_netcdf (int /*lev*/,
     NC_fabs.push_back(&NC_zeta_fab )   ; NC_names.push_back("zeta")    ; NC_dim_types.push_back(NC_Data_Dims_Type::Time_SN_WE); // 0
 
     // Read the netcdf file and fill these FABs
-    BuildFABsFromNetCDFFile<FArrayBox,Real>(domain, fname, NC_names, NC_dim_types, NC_fabs);
+    BuildFABsFromNetCDFFile<FArrayBox,Real>(domain, fname, NC_names, NC_dim_types, NC_fabs,
+                                            true, rec);
 }
 
 /**
