@@ -396,6 +396,13 @@ struct SolverChoice {
             amrex::Abort("remora.atm_press=true requires Pair forcing (remora.bulk_fluxes=true or driver coupling)");
         }
 
+        // Inverse-barometer compensation of interior zeta in the Flather
+        // boundary condition (ROMS PRESS_COMPENSATE; requires ATM_PRESS).
+        pp.queryAdd("press_compensate",press_compensate);
+        if (press_compensate && !atm_press) {
+            amrex::Abort("remora.press_compensate=true requires remora.atm_press=true (ROMS couples PRESS_COMPENSATE to ATM_PRESS)");
+        }
+
         // Shortwave penetration into the water column (ROMS SOLAR_SOURCE):
         // two-band Paulson & Simpson (1977) decay by Jerlov water type.
         // Without this the entire shortwave flux heats the top model cell.
@@ -867,6 +874,8 @@ struct SolverChoice {
     int vstretching = 4;
     // Inverse-barometer surface pressure in the PGF (ROMS ATM_PRESS)
     bool atm_press = false;
+    // Inverse-barometer zeta compensation in Flather OBC (ROMS PRESS_COMPENSATE)
+    bool press_compensate = false;
     // Shortwave penetration (ROMS SOLAR_SOURCE) and Jerlov water type (WTYPE)
     bool solar_source = false;
     int jerlov_water_type = 1;
