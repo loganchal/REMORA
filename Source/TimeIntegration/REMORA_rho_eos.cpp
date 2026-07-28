@@ -6,6 +6,7 @@ using namespace amrex;
  * @param[in   ] bx       box for calculation
  * @param[in   ] state    state holds temp, salt
  * @param[  out] rho      density
+ * @param[  out] pden      potential density anomaly referenced to the surface (may be empty)
  * @param[  out] rhoA     vertically-averaged density
  * @param[  out] rhoS     density perturbation
  * @param[  out] bvf      Brunt-Vaisala frequency
@@ -22,6 +23,7 @@ void
 REMORA::rho_eos (const Box& bx,
                 const Array4<Real const>& state,
                 const Array4<Real      >& rho,
+                const Array4<Real      >& pden,
                 const Array4<Real      >& rhoA,
                 const Array4<Real      >& rhoS,
                 const Array4<Real      >& bvf,
@@ -35,9 +37,9 @@ REMORA::rho_eos (const Box& bx,
                 const int N)
 {
     if (solverChoice.eos_type == EOSType::linear) {
-        lin_eos(bx, state, rho, rhoA, rhoS, bvf, Hz, z_w, z_r, h, mskr, N);
+        lin_eos(bx, state, rho, pden, rhoA, rhoS, bvf, Hz, z_w, z_r, h, mskr, N);
     } else if (solverChoice.eos_type == EOSType::nonlinear) {
-        nonlin_eos(bx, state, rho, rhoA, rhoS, bvf, alpha, beta, Hz, z_w, z_r, h, mskr, N);
+        nonlin_eos(bx, state, rho, pden, rhoA, rhoS, bvf, alpha, beta, Hz, z_w, z_r, h, mskr, N);
     } else {
         Abort("Unknown EOS type in rho_eos");
     }
@@ -47,6 +49,7 @@ REMORA::rho_eos (const Box& bx,
  * @param[in   ] bx       box for calculation
  * @param[in   ] state    state holds temp, salt
  * @param[  out] rho      density
+ * @param[  out] pden      potential density anomaly referenced to the surface (may be empty)
  * @param[  out] rhoA     vertically-averaged density
  * @param[  out] rhoS     density perturbation
  * @param[  out] bvf      Brunt-Vaisala frequency
@@ -61,6 +64,7 @@ void
 REMORA::lin_eos (const Box& bx,
                 const Array4<Real const>& state,
                 const Array4<Real      >& rho,
+                const Array4<Real      >& pden,
                 const Array4<Real      >& rhoA,
                 const Array4<Real      >& rhoS,
                 const Array4<Real      >& bvf,
@@ -91,11 +95,18 @@ REMORA::lin_eos (const Box& bx,
     Real Tcoef = solverChoice.Tcoef;
     Real Scoef = solverChoice.Scoef;
 
+    // ROMS rho_eos.F:722-743 (linear EOS): potential density anomaly is identical
+    // to the in-situ anomaly, pden(i,j,k)=rho(i,j,k) (rho_eos.F:743).
+    const bool calc_pden = (pden.dataPtr() != nullptr);
+
     ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
     {
         rho(i,j,k)  = (R0 - R0*Tcoef*(state(i,j,k,Temp_comp)-T0)
                          + R0*Scoef*(state(i,j,k,Salt_comp)-S0)
                          - Real(1000.0)) * mskr(i,j,0);
+        if (calc_pden) {
+            pden(i,j,k) = rho(i,j,k);
+        }
     });
 
 //
@@ -142,6 +153,7 @@ REMORA::lin_eos (const Box& bx,
  * @param[in   ] bx       box for calculation
  * @param[in   ] state    state holds temp, salt
  * @param[  out] rho      density
+ * @param[  out] pden      potential density anomaly referenced to the surface (may be empty)
  * @param[  out] rhoA     vertically-averaged density
  * @param[  out] rhoS     density perturbation
  * @param[  out] bvf      Brunt-Vaisala frequency
@@ -158,6 +170,7 @@ void
 REMORA::nonlin_eos (const Box& bx,
                 const Array4<Real const>& state,
                 const Array4<Real      >& rho,
+                const Array4<Real      >& pden,
                 const Array4<Real      >& rhoA,
                 const Array4<Real      >& rhoS,
                 const Array4<Real      >& bvf,
@@ -186,6 +199,7 @@ REMORA::nonlin_eos (const Box& bx,
     FArrayBox fab_Dden1DS(bx,1,amrex::The_Async_Arena()); auto Dden1DS = fab_Dden1DS.array();
 
     bool bulk_fluxes = solverChoice.bulk_fluxes;
+    const bool calc_pden = (pden.dataPtr() != nullptr);
 //
 //=======================================================================
 //  Non-linear equation of state.
@@ -240,6 +254,12 @@ REMORA::nonlin_eos (const Box& bx,
         den(i,j,k) = (den1(i,j,k)*bulk(i,j,k)*cff - Real(1000.0)) * mskr(i,j,0);
         // This line may need to move once bluk fluxes are added
         rho(i,j,k) = den(i,j,k);
+
+        // ROMS rho_eos.F:479-482: potential density anomaly referenced to the
+        // surface, pden = (den1 - 1000)*rmask. Needed by t3dmix2_iso.
+        if (calc_pden) {
+            pden(i,j,k) = (den1(i,j,k) - Real(1000.0)) * mskr(i,j,0);
+        }
 
         if (bulk_fluxes) {
             Real dCdT3=A01+Tt*(two*A02+Tt*(Real(3.0)*A03+Tt*Real(4.0)*A04));

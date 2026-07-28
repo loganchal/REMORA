@@ -94,7 +94,7 @@ enum class MaskType {
 
 /** \brief harmonic mixing; which surfaces to calculate along */
 enum class HarmonicMixingType {
-    s, geopotential
+    s, geopotential, isopycnal
 };
 
 struct SolverChoice {
@@ -610,6 +610,10 @@ struct SolverChoice {
         } else if (amrex::toLower(harmonic_mixing_type_string) == "geopotential" ||
                    amrex::toLower(harmonic_mixing_type_string) == "geo") {
             harmonic_mixing_type = HarmonicMixingType::geopotential;
+        } else if (amrex::toLower(harmonic_mixing_type_string) == "isopycnal" ||
+                   amrex::toLower(harmonic_mixing_type_string) == "isopycnic" ||
+                   amrex::toLower(harmonic_mixing_type_string) == "iso") {
+            harmonic_mixing_type = HarmonicMixingType::isopycnal;
         } else {
             amrex::Abort("Don't know this harmonic_mixing_type");
         }
