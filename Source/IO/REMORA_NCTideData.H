@@ -70,12 +70,19 @@ class NCTideData
         const amrex::MultiFab& Cmax   () const { return *mf_Cmax; }    //!< UV_Tmajor   [m/s]
         const amrex::MultiFab& Cmin   () const { return *mf_Cmin; }    //!< UV_Tminor   [m/s]
 
-    private:
         /** \brief Read one 2D-per-constituent field, apply the varinfo scale factor,
-         *         and store it (one component per constituent) into mf */
+         *         and store it (one component per constituent) into mf.
+         *
+         *  NOTE: this must stay public. It contains an extended __device__
+         *  lambda, and nvcc rejects those inside private/protected member
+         *  functions ("The enclosing parent function for an extended
+         *  __device__ lambda cannot have private or protected access within
+         *  its class"). Not an issue for host-only compilers, so a CPU build
+         *  will not catch a regression here. */
         void read_field (const std::string& var_name, amrex::Real scale,
                          amrex::MultiFab& mf, const amrex::Geometry& geom);
 
+    private:
         /// File to read from
         std::string file_name;
         /// Level-0 problem domain
