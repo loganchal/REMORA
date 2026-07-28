@@ -249,6 +249,16 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         ncf.var("hc").put_attr("long_name","S-coordinate parameter, critical depth");
         ncf.var("hc").put_attr("units","meter");
 
+        // ROMS writes these into every his/avg file and downstream ROMS
+        // tooling reads them to rebuild the vertical coordinate (e.g. the
+        // atlas pipeline's build_levels_table.m does ncread(file,'Vtransform')
+        // and 'Vstretching' before calling zlevs). Without them, ROMS-side
+        // analysis code cannot consume REMORA output.
+        ncf.def_var("Vtransform",NC_INT,{});
+        ncf.var("Vtransform").put_attr("long_name","vertical terrain-following transformation equation");
+        ncf.def_var("Vstretching",NC_INT,{});
+        ncf.var("Vstretching").put_attr("long_name","vertical terrain-following stretching function");
+
         ncf.def_var("grid",NC_INT, {});
         ncf.var("grid").put_attr("cf_role","grid_topology");
         ncf.var("grid").put_attr("topology_dimension",std::vector({2}));
@@ -688,6 +698,13 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             ncf.var("hc").put(&hc);
             ncf.var("theta_s").put(&theta_s);
             ncf.var("theta_b").put(&theta_b);
+            // REMORA implements the ROMS Vtransform=2 formula
+            // (z = zeta + (zeta+h)*(hc*s + Cs*h)/(hc+h), hc = tcline);
+            // Vstretching is the runtime choice, 4 or 5.
+            int vtransform = 2;
+            int vstretching = solverChoice.vstretching;
+            ncf.var("Vtransform").put(&vtransform);
+            ncf.var("Vstretching").put(&vstretching);
 
         }
         ncmpi_end_indep_data(ncf.ncid);

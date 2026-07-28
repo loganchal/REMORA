@@ -179,19 +179,32 @@ REMORA::rhs_uv_3d (int lev,
                                     ( cff1*(   W(i  ,j,k)+ W(i-1,j,k))
                                      -cff2*(   W(i+1,j,k)+ W(i-2,j,k)) );
             }
-            else // this needs to be split up so that the following can be concurrent
+            // Each boundary face is written by its OWN thread. Previously all
+            // four faces were written by every thread with k outside the
+            // interior range -- k IS the parallel index over a 3D box here, so
+            // that was four threads storing to the same addresses concurrently:
+            // undefined behaviour and 4x redundant work, even though the values
+            // agreed. Same shape as REMORA_rhs_t_3d.cpp:338-363, which is correct.
+            else if (k==N+1)
             {
                 FC(i,j,N+1)=zero;
-
+            }
+            else if (k==N)
+            {
                 FC(i,j,N)=( cff1*(uold(i  ,j,N-1,nrhs)+ uold(i,j,N  ,nrhs))
                                -cff2*(uold(i  ,j,N-2,nrhs)+ uold(i,j,N  ,nrhs)) )*
                                   ( cff1*(   W(i  ,j,N)+ W(i-1,j,N))
                                    -cff2*(   W(i+1,j,N)+ W(i-2,j,N)) );
-
+            }
+            else if (k==1)
+            {
                 FC(i,j,1)=( cff1*(uold(i  ,j,0,nrhs)+ uold(i,j,1,nrhs))
                              -cff2*(uold(i  ,j,0,nrhs)+ uold(i,j,2,nrhs)) )*
                                 ( cff1*(   W(i  ,j,1)+ W(i-1,j,1))
                                  -cff2*(   W(i+1,j,1)+ W(i-2,j,1)) );
+            }
+            else if (k==0)
+            {
                 FC(i,j,0)=zero;
             }
         });
@@ -200,8 +213,9 @@ REMORA::rhs_uv_3d (int lev,
         {
             if (k>0 && k<=N) {
                 FC(i,j,k) = Real(0.25) * (uold(i,j,k-1,nrhs)+uold(i,j,k,nrhs)) * (W(i,j,k) + W(i-1,j,k));
-            } else {
+            } else if (k==N+1) {
                 FC(i,j,N+1)=zero;
+            } else if (k==0) {
                 FC(i,j,0)=zero;
             }
         });
@@ -327,19 +341,28 @@ REMORA::rhs_uv_3d (int lev,
                                 ( cff1*(W(i,j  ,k)+ W(i,j-1,k))
                                  -cff2*(W(i,j+1,k)+ W(i,j-2,k)) );
               }
-              else // this needs to be split up so that the following can be concurrent
+              // One face per thread; see the u-direction note above.
+              else if (k==N+1)
               {
                   FC(i,j,N+1)=zero;
+              }
+              else if (k==N)
+              {
                   FC(i,j,N)=( cff1*(vold(i,j,N-1,nrhs)+ vold(i,j,N  ,nrhs))
                                -cff2*(vold(i,j,N-2,nrhs)+ vold(i,j,N  ,nrhs)) )*
                                   ( cff1*(W(i,j  ,N)+ W(i,j-1,N))
                                    -cff2*(W(i,j+1,N)+ W(i,j-2,N)) );
+              }
+              else if (k==1)
+              {
                   FC(i,j,1)=( cff1*(vold(i,j,0,nrhs)+ vold(i,j,1,nrhs))
                                  -cff2*(vold(i,j,0,nrhs)+ vold(i,j,2,nrhs)) )*
                                 ( cff1*(W(i,j  ,1)+ W(i,j-1,1))
                                  -cff2*(W(i,j+1,1)+ W(i,j-2,1)) );
+              }
+              else if (k==0)
+              {
                   FC(i,j,0)=zero;
-                  //              FC(i,0,-1)=zero;
               }
         });
     } else if (uv_hadv_scheme == AdvectionScheme::centered2) {
@@ -347,8 +370,9 @@ REMORA::rhs_uv_3d (int lev,
         {
             if (k>0 && k<=N) {
                 FC(i,j,k) = Real(0.25) * (vold(i,j,k-1,nrhs)+vold(i,j,k,nrhs)) * (W(i,j,k) + W(i,j-1,k));
-            } else {
+            } else if (k==N+1) {
                 FC(i,j,N+1)=zero;
+            } else if (k==0) {
                 FC(i,j,0)=zero;
             }
         });

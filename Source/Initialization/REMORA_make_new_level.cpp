@@ -907,8 +907,13 @@ REMORA::set_curvilinear_terms_from_grid_scale (int lev) {
         Box bx = mfi.growntilebox(IntVect(NGROW,NGROW,0));
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int)
         {
+            // dndx = d(1/n)/d(xi) and dmde = d(1/m)/d(eta), i.e. each is a
+            // difference of the SAME metric. The second dmde term read pn,
+            // giving 0.5*(dx(j+1) - dy(j-1)): half the local dx-dy anisotropy
+            // injected as a spurious, persistent rotational forcing on
+            // momentum through cff4 = cff2*dmde in REMORA_curvilinear.cpp.
             dndx(i,j,0) = Real(0.5) * (one / pn(i+1,j  ,0) - one / pn(i-1,j  ,0));
-            dmde(i,j,0) = Real(0.5) * (one / pm(i  ,j+1,0) - one / pn(i  ,j-1,0));
+            dmde(i,j,0) = Real(0.5) * (one / pm(i  ,j+1,0) - one / pm(i  ,j-1,0));
         });
     }
 }

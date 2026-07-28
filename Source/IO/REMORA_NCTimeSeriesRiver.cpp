@@ -141,6 +141,17 @@ void NCTimeSeriesRiver::update_interpolated_to_time (amrex::Real time) {
     // Figure out time index:
     AMREX_ASSERT(time >= river_times[0]);
     AMREX_ASSERT(time <= river_times[river_times.size()-1]);
+    // Hard check, not AMREX_ASSERT: asserts compile out in release, and an
+    // out-of-range time then leaves i_time_before at its -100 sentinel and
+    // indexes file_for_time[-99]. Matches the guard in NCTimeSeries.
+    if (time < river_times[0] || time > river_times[river_times.size()-1]) {
+        amrex::Print() << "Model time " << time << " s is outside the range of the river "
+                       << "forcing file (" << river_times[0] << " .. "
+                       << river_times[river_times.size()-1] << " s).\n"
+                       << "Note REMORA has no cyclic-time handling, so a ROMS "
+                       << "day-of-year river climatology cannot be used directly.\n";
+        amrex::Abort("River forcing time out of range");
+    }
     int i_time_before_old = i_time_before;
     for (int nt=0; nt < river_times.size()-1; nt++) {
         if ((river_times[nt] <= time) and (river_times[nt+1] >= time)) {
