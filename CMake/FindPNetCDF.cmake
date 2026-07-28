@@ -35,9 +35,14 @@ if (NOT PNETCDF_LINK_LIBRARIES)
   find_library (PNETCDF_LINK_LIBRARIES NAMES pnetcdf
                 HINTS ${PNETCDF_DIR} ENV PNETCDF_DIR
                 PATH_SUFFIXES lib lib64)
-  if (PNETCDF_LINK_LIBRARIES)
-    set (PNETCDF_LIBRARIES pnetcdf)
-  endif ()
+endif ()
+
+# Set outside the block above: find_library caches PNETCDF_LINK_LIBRARIES, so
+# on any re-configure of an existing build directory that block is skipped.
+# PNETCDF_LIBRARIES is not a cache variable, so setting it inside would leave
+# it empty on the second configure and fail the check below.
+if (PNETCDF_LINK_LIBRARIES AND NOT PNETCDF_LIBRARIES)
+  set (PNETCDF_LIBRARIES pnetcdf)
 endif ()
 
 # handle the QUIETLY and REQUIRED arguments and set PNETCDF_FOUND to TRUE if
