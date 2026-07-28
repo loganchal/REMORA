@@ -118,16 +118,19 @@ REMORA::prestep_t_advection (int lev, const Box& tbx, const Box& gbx,
     gbx1D.makeSlab(2,0);
 
     // We used to set W(i,j,0) = 0.0, but this should have already been set before passing into the function
-    ParallelFor(gbx1D, N+1,
-    [=] AMREX_GPU_DEVICE (int i, int j, int , int kk)
+    ParallelFor(gbx1D,
+    [=] AMREX_GPU_DEVICE (int i, int j, int )
     {
         //  Starting with zero vertical velocity at the bottom, integrate
         //  from the bottom (k=0) to the free-surface (k=N).  The w(:,:,N(ng))
         //  contains the vertical velocity at the free-surface, d(zeta)/d(t).
         //  Notice that barotropic mass flux divergence is not used directly.
         //
-        int k = kk + 1;
-        W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)) - (Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
+        //  The running sum is a serial dependence in k, so it must live
+        //  inside one thread per column (the fused-index form raced on GPU).
+        for (int k = 1; k <= N+1; ++k) {
+            W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)) - (Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
+        }
     });
     ParallelFor(gbx1D, [=] AMREX_GPU_DEVICE (int i, int j, int )
     {
@@ -322,7 +325,9 @@ REMORA::prestep_t_advection (int lev, const Box& tbx, const Box& gbx,
     // Time-step vertical advection of tracers (Tunits). Impose artificial
     // continuity equation.
     //
-    ParallelFor(growHi(growLo(convert(tbx,IntVect(0,0,1)),2,-2),2,-1), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+    // Interior C4 faces are k=2..N-1 (the k=N face is one-sided, set below);
+    // running this loop to k=N read tempold(i,j,N+1) out of the cell range.
+    ParallelFor(growHi(growLo(convert(tbx,IntVect(0,0,1)),2,-2),2,-2), [=] AMREX_GPU_DEVICE (int i, int j, int k)
     {
         //-----------------------------------------------------------------------
         //  Add in vertical advection.

@@ -323,16 +323,19 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         Box gbx1D = gbx1;
         gbx1D.makeSlab(2,0);
 
-        ParallelFor(gbx1D, N+1,
-        [=] AMREX_GPU_DEVICE (int i, int j, int , int kk)
+        ParallelFor(gbx1D,
+        [=] AMREX_GPU_DEVICE (int i, int j, int )
         {
             //  Starting with zero vertical velocity at the bottom, integrate
             //  from the bottom (k=0) to the free-surface (k=N).  The w(:,:,N(ng))
             //  contains the vertical velocity at the free-surface, d(zeta)/d(t).
             //  Notice that barotropic mass flux divergence is not used directly.
             //
-            int k = kk + 1;
-            W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)) - (Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
+            //  The running sum is a serial dependence in k, so it must live
+            //  inside one thread per column (the fused-index form raced on GPU).
+            for (int k = 1; k <= N+1; ++k) {
+                W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)) - (Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
+            }
         });
         ParallelFor(gbx1D, [=] AMREX_GPU_DEVICE (int i, int j, int )
         {
