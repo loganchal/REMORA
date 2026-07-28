@@ -1,0 +1,65 @@
+# Moana-hindcast parity gates — every runtime setting that silently breaks
+# scientific equivalence with the Moana ROMS 3.9 build if left at REMORA's
+# default. Sources: external/moana_hindcast/configuration/{roms.in,roms3d.h}
+# and the kernel parity audits (atlas docs/gpu_port_parity_ledger.md).
+# This is not yet a runnable problem; it is the canonical settings block to
+# be included by the eventual Moana Exec case.
+
+# --- vertical grid (roms.in) ---
+remora.vstretching       = 5          # Moana: Vtransform=2, Vstretching=5
+remora.theta_s           = 6.0
+remora.theta_b           = 2.0
+remora.tcline            = 250.0
+
+# --- advection (roms.in Hadvection=SU3, Vadvection=C4) ---
+# Moana's "SU3" compiles to the pure centered-4 flux (TS_U3ADV_SPLIT is NOT
+# defined in roms3d.h, so the upstream-biased half does not exist in the
+# build). REMORA's default upstream3 would add hyperdiffusion Moana lacks.
+remora.tracer_horizontal_advection_scheme = centered4
+# Momentum stays at REMORA's default upstream3 — audited identical to ROMS's
+# momentum advection (2D and 3D); the branch name is misleading but correct.
+remora.uv_horizontal_advection_scheme = upstream3
+# flat_bathymetry must NEVER be set true (its advection paths are wrong).
+remora.flat_bathymetry   = false
+
+# --- lateral mixing (roms.in) ---
+# TNU2 = 25 m2/s both tracers; VISC2 = 5 m2/s; MIX_ISO_TS (isoneutral
+# rotation) is NOT yet in REMORA — gap G12, port pending.
+remora.tnu2_temp         = 25.0
+remora.tnu2_salt         = 25.0
+remora.visc2             = 5.0
+
+# --- vertical mixing background (roms.in) ---
+remora.Akt_bak           = 1.0e-5
+remora.Akv_bak           = 1.0e-5
+# MY2.5 closure proper is gap G2 (REMORA GLS k-kl emulation is NOT the
+# ROMS MY25 module).
+
+# --- bottom drag (roms3d.h UV_QDRAG + roms.in) ---
+remora.rdrag2            = 1.0e-3    # quadratic; Zob=0.02 unused under UV_QDRAG
+
+# --- EOS / physics constants ---
+remora.rho0              = 1025.0    # matches REMORA default; pinned anyway
+# g=9.81 and StefBo=5.67E-8 are pinned in Source/REMORA_Constants.H on this
+# fork (ROMS mod_scalars.F values).
+
+# --- surface forcing (roms3d.h BULK_FLUXES et al., roms.in) ---
+remora.bulk_fluxes       = true
+remora.qair_is_percent   = true      # Moana Qair is percent RH; default false
+                                     # silently reads it as g/kg — large error
+remora.blk_ZW            = 10.0
+remora.blk_ZT            = 2.0       # REMORA default is 10 — must override
+remora.blk_ZQ            = 2.0       # REMORA default is 10 — must override
+remora.longwave_down     = true      # LONGWAVE_OUT: downward LW read, eps*sigma*T^4 out
+remora.eminusp_type      = computed  # EMINUSP
+remora.eminusp_correct_ssh = false   # no such term in ROMS
+remora.atm_press         = true      # ATM_PRESS (this fork)
+remora.solar_source      = true      # SOLAR_SOURCE (this fork)
+remora.jerlov_water_type = 1         # roms.in WTYPE
+
+# --- still-missing physics (must exist before a Moana run is meaningful) ---
+# tides (SSH_TIDES/UV_TIDES/ADD_FSOBC/ADD_M2OBC)  -> gap G1
+# MY2.5 closure                                    -> gap G2
+# isoneutral tracer diffusion (MIX_ISO_TS)         -> gap G12
+# PRESS_COMPENSATE in Flather OBC                  -> gap G6 (boundary half)
+# splines vertical diffusion (SPLINES_VDIFF/VVISC) -> gap G5 (verify first)
