@@ -360,6 +360,12 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
                   vec_Akt[lev].get(),vec_Akk[lev].get(), vec_Akp[lev].get(), vec_mskr[lev].get(),
                   vec_msku[lev].get(), vec_mskv[lev].get(),
                   nstp, nnew, N, dt_lev);
+    } else if (solverChoice.vert_mixing_type == VertMixingType::MY25) {
+        // MY2.5 has no Akp: the q^2*l equation is diffused with Akk as well
+        my25_corrector(lev, vec_gls[lev].get(), vec_tke[lev].get(), mf_W, vec_Akv[lev].get(),
+                  vec_Akt[lev].get(), vec_Akk[lev].get(), vec_mskr[lev].get(),
+                  vec_msku[lev].get(), vec_mskv[lev].get(),
+                  nstp, nnew, N, dt_lev);
     }
     nnew = 0;
 

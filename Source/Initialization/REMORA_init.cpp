@@ -182,6 +182,57 @@ REMORA::init_gls_vmix (int lev, SolverChoice solver_choice)
 }
 
 /**
+ * Initialize the Mellor-Yamada 2.5 turbulence variables.
+ *
+ * Mirrors ROMS mod_scalars/mod_mixing.F:1037-1060 (initialize_mixing, the
+ * `GLS_MIXING || MY25_MIXING` branch), which seeds tke and gls with
+ * gls_Kmin/gls_Pmin and zeroes Lscale for MY2.5 exactly as for GLS.  Moana
+ * hot-starts without PERFECT_RESTART, so tke/gls/Lscale are always rebuilt
+ * internally rather than read from the restart file.
+ *
+ * Akv/Akt/Akk take their background values on the interior faces and zero at
+ * k=0 and k=N+1 (mod_mixing.F:986-1008); my25_corstep never writes those two
+ * end faces, so the zeros persist for the whole run -- as in ROMS.
+ *
+ * @param[in   ] lev            level to operate on
+ * @param[in   ] solver_choice  algorithmic choices
+ */
+void
+REMORA::init_my25_vmix (int lev, SolverChoice solver_choice)
+{
+    vec_tke[lev]->setVal(solver_choice.gls_Kmin);
+    vec_gls[lev]->setVal(solver_choice.gls_Pmin);
+    vec_Lscale[lev]->setVal(zero);
+    vec_Akk[lev]->setVal(solver_choice.Akk_bak);
+    vec_Akv[lev]->setVal(solver_choice.Akv_bak);
+    vec_Akt[lev]->setVal(solver_choice.Akt_bak);
+
+    auto N = Geom(lev).Domain().size()[2]-1; // Number of vertical "levs" aka, NZ
+
+#ifdef _OPENMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(*vec_Akk[lev], TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+        Box bx = mfi.growntilebox(IntVect(NGROW,NGROW,0));
+        Array4<Real> const& Akk = vec_Akk[lev]->array(mfi);
+        Array4<Real> const& Akt = vec_Akt[lev]->array(mfi);
+        Array4<Real> const& Akv = vec_Akv[lev]->array(mfi);
+
+        ParallelFor(makeSlab(bx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
+        {
+            Akk(i,j, 0) = zero;
+            Akk(i,j, N+1) = zero;
+
+            Akv(i,j, 0) = zero;
+            Akv(i,j, N+1) = zero;
+
+            Akt(i,j, 0) = zero;
+            Akt(i,j, N+1) = zero;
+        });
+    }
+}
+
+/**
  * @param[in   ] lev     level to operate on
  */
 void

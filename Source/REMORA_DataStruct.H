@@ -44,7 +44,7 @@ enum class PlotfileType {
 
 /** \brief vertical mixing type */
 enum class VertMixingType {
-    analytic, GLS
+    analytic, GLS, MY25
 };
 
 /** \brief horizontal viscosity/diffusion type */
@@ -637,6 +637,18 @@ struct SolverChoice {
             else {
                 amrex::Abort("Don't know this GLS stability type");
             }
+        } else if (amrex::toLower(vert_mixing_type_string) == "my25" ||
+                   amrex::toLower(vert_mixing_type_string) == "my2.5") {
+            // ROMS MY25_MIXING (Mellor-Yamada level 2.5), as compiled for the
+            // Moana hindcast: MY25_MIXING + KANTHA_CLAYSON + N2S2_HORAVG
+            // + RI_SPLINES.  The closure constants are fixed parameters in
+            // ROMS mod_scalars.F, not roms.in inputs, so they are not exposed
+            // as runtime options here either.
+            vert_mixing_type = VertMixingType::MY25;
+            // tke/gls initial values (ROMS mod_mixing.F initialize_mixing uses
+            // gls_Kmin/gls_Pmin for both GLS_MIXING and MY25_MIXING)
+            pp.queryAdd("gls_Kmin", gls_Kmin);
+            pp.queryAdd("gls_Pmin", gls_Pmin);
         } else {
             amrex::Abort("Don't know this vertical mixing type");
         }

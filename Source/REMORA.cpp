@@ -786,6 +786,9 @@ REMORA::init_set_vmix(int lev) {
         init_gls_vmix(lev, solverChoice);
         // The GLS initialization just sets the multifab to a value, so there's
         // no need to call FillPatch here
+    } else if (solverChoice.vert_mixing_type == VertMixingType::MY25) {
+        init_my25_vmix(lev, solverChoice);
+        // As for GLS: setVal only, no FillPatch needed
     } else {
         Abort("Don't know this vertical mixing type");
     }

@@ -510,6 +510,9 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     if (solverChoice.vert_mixing_type == VertMixingType::GLS) {
         gls_prestep(lev, mf_gls, mf_tke, mf_W, mf_msku.get(), mf_mskv.get(),
                 nstp, nnew, iic, ntfirst, N, dt_lev);
+    } else if (solverChoice.vert_mixing_type == VertMixingType::MY25) {
+        my25_prestep(lev, mf_gls, mf_tke, mf_W, mf_msku.get(), mf_mskv.get(),
+                nstp, nnew, iic, ntfirst, N, dt_lev);
     }
     nstp = 0;
 

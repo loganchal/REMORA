@@ -1055,6 +1055,23 @@ public:
                         const int nstp, const int nnew,
                         const int N, const amrex::Real dt_lev);
 
+    /** \brief Initialize Mellor-Yamada 2.5 variables */
+    void init_my25_vmix (int lev, SolverChoice solver_choice);
+    /** \brief Predictor step for Mellor-Yamada 2.5 (ROMS my25_prestep.F) */
+    void my25_prestep (int lev, amrex::MultiFab* mf_gls, amrex::MultiFab* mf_tke,
+                       amrex::MultiFab& mf_W,
+                       amrex::MultiFab* mf_msku, amrex::MultiFab* mf_mskv,
+                       const int nstp, const int nnew, const int iic, const int ntfirst,
+                       const int N, const amrex::Real dt_lev);
+    /** \brief Corrector step for Mellor-Yamada 2.5 (ROMS my25_corstep.F) */
+    void my25_corrector (int lev, amrex::MultiFab* mf_gls, amrex::MultiFab* mf_tke,
+                         amrex::MultiFab& mf_W, amrex::MultiFab* mf_Akv, amrex::MultiFab* mf_Akt,
+                         amrex::MultiFab* mf_Akk,
+                         amrex::MultiFab* mf_mskr,
+                         amrex::MultiFab* mf_msku, amrex::MultiFab* mf_mskv,
+                         const int nstp, const int nnew,
+                         const int N, const amrex::Real dt_lev);
+
     /** \brief Scale RHS momentum variables by 1/cell area, needed before FillPatch to different levels*/
     void scale_rhs_vars ();
     /** \brief Scale RHS momentum variables by cell area, needed after FillPatch to different levels*/

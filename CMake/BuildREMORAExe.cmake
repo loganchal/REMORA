@@ -113,6 +113,7 @@ function(build_remora_lib remora_lib_name)
        ${SRC_DIR}/TimeIntegration/REMORA_setup_step.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_rho_eos.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_gls.cpp
+       ${SRC_DIR}/TimeIntegration/REMORA_my25.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_prsgrd.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_uv3dmix.cpp
        ${SRC_DIR}/TimeIntegration/REMORA_t3dmix.cpp
