@@ -20,6 +20,7 @@ REMORA::calc_stretch_coeffs ()
     Box bx(IntVect(0,0,0),IntVect(0,0,N));
     const auto local_theta_s = solverChoice.theta_s;
     const auto local_theta_b = solverChoice.theta_b;
+    const int  local_vstretching = solverChoice.vstretching;
 
     //amrex::Vector<Real> s_w_vec(N+1); auto s_w_dat = s_w_vec.data();
     //amrex::Vector<Real> Cs_w_vec(N+1); auto Cs_w_dat = Cs_w_vec.data();
@@ -34,7 +35,24 @@ REMORA::calc_stretch_coeffs ()
     {
         Real Csur,Cbot;
 
-        s_w_dat[k]=ds*(k-N);
+        // s-coordinate spacing. Vstretching=4 (REMORA original): uniform.
+        // Vstretching=5 (ROMS set_scoord.F:487-532, Souza-style): quadratic
+        // spacing with forced endpoints s_w(0)=-1, s_w(N)=0. The Csur/Cbot
+        // transformation below is identical for both.
+        if (local_vstretching == 5) {
+            const Real rN = Real(N);
+            const Real rk = Real(k);
+            if (k == N) {
+                s_w_dat[k] = zero;
+            } else if (k == 0) {
+                s_w_dat[k] = -one;
+            } else {
+                s_w_dat[k] = -(rk*rk - two*rk*rN + rk + rN*rN - rN)/(rN*rN - rN)
+                             - Real(0.01)*(rk*rk - rk*rN)/(one - rN);
+            }
+        } else {
+            s_w_dat[k]=ds*(k-N);
+        }
         if (local_theta_s > zero) {
             Csur=(one-std::cosh(local_theta_s*s_w_dat[k]))/
                 (std::cosh(local_theta_s)-one);
@@ -49,9 +67,21 @@ REMORA::calc_stretch_coeffs ()
         } else {
             Cs_w_dat[k]=Csur;
         }
+        // ROMS forces the bottom endpoint exactly (set_scoord.F:510-511)
+        if (local_vstretching == 5 && k == 0) {
+            Cs_w_dat[k] = -one;
+        }
 
         if (k<N) {
-            s_r_dat[k]=ds*(k-N+Real(0.5));
+            if (local_vstretching == 5) {
+                // rho-point k here corresponds to ROMS k+1, i.e. rk = (k+1)-0.5
+                const Real rN = Real(N);
+                const Real rk = Real(k) + Real(0.5);
+                s_r_dat[k] = -(rk*rk - two*rk*rN + rk + rN*rN - rN)/(rN*rN - rN)
+                             - Real(0.01)*(rk*rk - rk*rN)/(one - rN);
+            } else {
+                s_r_dat[k]=ds*(k-N+Real(0.5));
+            }
 
             if (local_theta_s > zero) {
                 Csur=(one-std::cosh(local_theta_s*s_r_dat[k]))/
@@ -118,8 +148,6 @@ REMORA::stretch_transform (int lev)
 
         Real hc = -min(geomdata.ProbHi(2),-solverChoice.tcline); // Do we need to enforce min here?
 
-        Real ds = one / Real(N);
-
         amrex::ParallelFor(wgbx3, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             z_w(i,j,k) = h(i,j,0);
@@ -131,8 +159,10 @@ REMORA::stretch_transform (int lev)
         amrex::ParallelFor(wgbx3, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             if (k < N) {
-                Real sc_r=ds*(k-N+Real(0.5));
-                Real sc_w=ds*(k-N);
+                // Use the stored s-coordinate arrays (not a uniform recompute):
+                // identical for Vstretching=4, required for Vstretching=5.
+                Real sc_r=s_r_dat[k];
+                Real sc_w=s_w_dat[k];
                 Real cff_r = hc*sc_r;
                 Real cff1_r = Cs_r_dat[k];
                 Real cff_w=hc*sc_w;

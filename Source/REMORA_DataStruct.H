@@ -383,6 +383,10 @@ struct SolverChoice {
         pp.queryAdd("theta_s",theta_s);
         pp.queryAdd("theta_b",theta_b);
         pp.queryAdd("tcline",tcline);
+        pp.queryAdd("vstretching",vstretching);
+        if (vstretching != 4 && vstretching != 5) {
+            amrex::Abort("remora.vstretching must be 4 (Shchepetkin 2010) or 5 (quadratic-spaced variant, ROMS Vstretching=5)");
+        }
 
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
@@ -839,6 +843,8 @@ struct SolverChoice {
     amrex::Real theta_s = amrex::Real(3.0);
     amrex::Real theta_b = zero;
     amrex::Real tcline  = amrex::Real(150.0);
+    // Vertical stretching function selector (ROMS Vstretching): 4 or 5
+    int vstretching = 4;
 
     // Linear drag coefficient [m/s]
     amrex::Real rdrag = amrex::Real(3e-4);
