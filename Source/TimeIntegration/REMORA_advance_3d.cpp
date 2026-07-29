@@ -177,6 +177,21 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         vert_mean_3d(ybx,0,1,v,Hz,DV_avg1,DC,CF,pm,mskv,nnew,N);
     }
 
+    // Refresh the halos before applying the boundary conditions. vert_mean_3d
+    // has just rewritten mf_u/mf_v box by box, and the Orlanski conditions read
+    // ALONG the boundary at i+/-1 / j+/-1 -- which, where an internal box edge
+    // meets the domain edge, lands in a halo cell that no longer matches the
+    // neighbour's updated value.
+    //
+    // Invisible with a single box, because there the "halo" is simply the
+    // adjacent valid data. Measured with 4 boxes: u differed at (j=0,i=198)
+    // and (j=466,i=198) -- the north and south domain edges at the x box split,
+    // 395/2 -- and v at (j=233,i=0) and (j=233,i=396) -- the west and east
+    // edges at the y box split, 465/2. Exactly the cells where the condition
+    // reads across a box boundary, and nowhere else.
+    mf_u.FillBoundary(geom[lev].periodicity());
+    mf_v.FillBoundary(geom[lev].periodicity());
+
     // Apply physical boundary conditions to u and v
     (*physbcs[lev])(mf_u,*mf_msku,0,1,mf_u.nGrowVect(),t_old[lev],xvel_bc(),0,*xvel_old[lev]);
     (*physbcs[lev])(mf_v,*mf_mskv,0,1,mf_v.nGrowVect(),t_old[lev],yvel_bc(),0,*yvel_old[lev]);
@@ -185,9 +200,6 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         // Fill the data which is stored in the boundary data read from netcdf files
         if (solverChoice.boundary_from_netcdf)
         {
-            // t_new, not t_old: ROMS's set_data runs after the clock advances,
-            // so boundary data is the snapshot at the time being stepped to.
-            // See the note in Advance() on set_tides.
             // t_old, not t_new: ROMS evaluates open-boundary data at the time
             // the step STARTS (see the note in advance_2d). This is the 3D
             // momentum boundary for the SINGLE-LEVEL path -- max_level == 0
