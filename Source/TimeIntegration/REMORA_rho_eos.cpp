@@ -219,8 +219,14 @@ REMORA::nonlin_eos (const Box& bx,
         // sides remain a matched pair. Deliberately does NOT touch the
         // bulk_fluxes alpha/beta block below, because ROMS's rho_eos.F:444 has
         // its own Tpr10 assignment that the ROMS ablation leaves alone.
+// The macro carries the constant reference depth to use, and it must be
+// NON-ZERO. Tp = 0 collapses bulk to bulk0 and cff to 1/bulk0, making the
+// density line an exact reciprocal pair (den1*bulk0*(1/bulk0)) -- a
+// cancellation ROMS's -ffast-math build may exploit and this FASTMATH=OFF
+// build may not, which degrades agreement by eight orders of magnitude and
+// tells you nothing about the port. Use e.g. -1000.0.
 #ifdef REMORA_ABLATE_EOS_PRESSURE
-        Real Tp = Real(0.0);
+        Real Tp = Real(REMORA_ABLATE_EOS_PRESSURE);
 #else
         Real Tp = z_r(i,j,k);
 #endif
