@@ -354,6 +354,30 @@ REMORA::init_zeta_from_netcdf (int lev)
         FillPatch(lev, t_old[lev], *vec_zeta[lev], GetVecOfPtrs(vec_zeta), zeta_bc(), BdyVars::zeta,
                   0, false,false,0,0,zero,*vec_zeta[lev]);
     }
+
+    // Restore the initial file's own values everywhere it covers.
+    //
+    // ROMS applies no lateral boundary condition at initialisation: zetabc is
+    // called from step2d, so the state ROMS starts from is byte-for-byte the
+    // ini file, ghost rows included (its rho arrays run 0:Lm+1 and the file
+    // carries those rows). The physbcs/fill_from_bdyfiles calls above are still
+    // needed to populate REMORA's OUTER ghosts, which the file does not reach,
+    // but they must not be allowed to alter the cells the file does provide.
+    //
+    // Measured: without this, sea level on the boundary rows differs from ROMS
+    // by up to 4.9e-03 m before a single step is taken, and the first step
+    // amplifies that to 1.8e-01 m, which then radiates inward at sqrt(gH).
+    for (int idx = 0; idx < num_boxes_at_level[lev]; idx++)
+    {
+        for ( MFIter mfi(*vec_zeta[lev], false); mfi.isValid(); ++mfi )
+        {
+            // FArrayBox-to-FArrayBox copy is copy-on-intersection, so this
+            // touches only the cells the file actually covers.
+            (*vec_zeta[lev])[mfi].template copy<RunOn::Device>(NC_zeta_fab[idx],0,0,1);
+        }
+    }
+    vec_zeta[lev]->FillBoundary(geom[lev].periodicity());
+
 //    fill_from_bdyfiles(lev, *vec_zeta[lev], *vec_mskr[lev], told, BCVars::zeta_bc,BdyVars::zeta,1,1);
 //    fill_from_bdyfiles(lev, *vec_zeta[lev], *vec_mskr[lev], told, BCVars::zeta_bc,BdyVars::zeta,2,2);
 }
