@@ -212,7 +212,18 @@ REMORA::nonlin_eos (const Box& bx,
         Ts = std::min(Real(100.0), Ts);
         Real sqrtTs = std::sqrt(Ts);
 
+        // GPU-PARITY ABLATION (diagnostic build only, never production).
+        // Mirrors the one-line ROMS edit in hpc/roms_ext/build_roms_eosabl.slurm,
+        // rho_eos.F:271 Tp=z_r -> Tp=0. Zeroing Tp here cascades to Tpr10, to
+        // bulk, and to DbulkDT/DbulkDS exactly as it does in ROMS, so the two
+        // sides remain a matched pair. Deliberately does NOT touch the
+        // bulk_fluxes alpha/beta block below, because ROMS's rho_eos.F:444 has
+        // its own Tpr10 assignment that the ROMS ablation leaves alone.
+#ifdef REMORA_ABLATE_EOS_PRESSURE
+        Real Tp = Real(0.0);
+#else
         Real Tp = z_r(i,j,k);
+#endif
         Real Tpr10 = Real(0.1)*Tp;
 
         Real C0 = Q00+Tt*(Q01+Tt*(Q02+Tt*(Q03+Tt*(Q04+Tt*Q05))));
