@@ -148,16 +148,7 @@ REMORA::FillPatch (int lev, Real time, MultiFab& mf_to_fill, Vector<MultiFab*> c
 
 #ifdef REMORA_USE_NETCDF
         // Fill the data which is stored in the boundary data read from netcdf files
-        // init_bdy_condition_only: at initialisation ROMS applies the
-        // boundary CONDITION (physbcs, above) and does not hard-fill the ghost
-        // from the boundary file. At init nstp and nout hold the same state, so
-        // dTdt = 0 and the Orlanski radiation collapses to pure nudging toward
-        // the boundary data -- a ~2.6e-04 degC correction, not a replacement.
-        // The guard must sit here rather than being expressed by passing
-        // BdyVars::null, which would also deprive physbcs of the boundary data
-        // and nudge the ghost toward zero instead.
-        if ( (solverChoice.boundary_from_netcdf) && (bdy_var_type != BdyVars::null)
-             && !init_bdy_condition_only )
+        if ( (solverChoice.boundary_from_netcdf) && (bdy_var_type != BdyVars::null) )
         {
             fill_from_bdyfiles(lev, mf_to_fill,*mask,time,bccomp,bdy_var_type, icomp,icomp_calc,mf_calc,dt_lev);
         }

@@ -442,12 +442,10 @@ REMORA::InitData ()
         }
 
         if (restart_chkfile == "") {
-            init_bdy_condition_only = true;
             FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t, 0, true, false,0,0,zero,*cons_new[lev]);
             FillPatch(lev, t_new[lev], *xvel_new[lev], xvel_new, xvel_bc(), BdyVars::u, 0, true, false,0,0,zero,*xvel_new[lev]);
             FillPatch(lev, t_new[lev], *yvel_new[lev], yvel_new, yvel_bc(), BdyVars::v, 0, true, false,0,0,zero,*yvel_new[lev]);
             FillPatch(lev, t_new[lev], *zvel_new[lev], zvel_new, zvel_bc(), BdyVars::null, 0, true, false);
-            init_bdy_condition_only = false;
 
             // Copy from new into old just in case when initializing from scratch
             int ngs   = cons_new[lev]->nGrow();

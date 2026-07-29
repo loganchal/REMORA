@@ -1254,12 +1254,6 @@ public:
     /** \brief Problem initialization from NetCDF file */
     void init_data_from_netcdf (int lev);
 
-    /** True while the initial state is being built: suppresses the hard
-        boundary-file fill in FillPatch, so only the boundary CONDITION is
-        applied. ROMS's ini_fields calls t3dbc/u3dbc/v3dbc at initialisation
-        but never overwrites the ghost with the boundary file. */
-    bool init_bdy_condition_only = false;
-
     /** Zero every land point of the initial state, as ROMS does on read. */
     void mask_land_in_initial_state (int lev);
     /** \brief High resolution roblem initialization from NetCDF file */
