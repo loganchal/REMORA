@@ -223,10 +223,12 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             Real cff_vp=cff_saturation_water*Real(0.98);
 
             //   Compute Qsea (kg/kg) from vapor pressure.
-            //   NOTE: ROMS does not have the small-value guard here, but does for
-            //   Q and Qair
-
-            Real Qsea=Real(0.62197)*(cff_vp/(PairM-Real(0.378)*cff_vp+eps));
+            //   The epsilon guard that used to be here is gone: ROMS
+            //   (bulk_flux.f90:866) has none, and bit-identity admits no extra
+            //   terms. It was 1e-20 against PairM ~1019, so removing it is not
+            //   expected to move any measured number -- the Q and Qair guards
+            //   were removed earlier for the same reason and measured null.
+            Real Qsea=Real(0.62197)*(cff_vp/(PairM-Real(0.378)*cff_vp));
             //
             // -----------------------------------------------------------------------
             //   Compute Monin-Obukhov similarity parameters for wind (Wstar),
