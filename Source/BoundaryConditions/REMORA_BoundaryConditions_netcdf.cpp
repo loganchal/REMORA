@@ -190,6 +190,26 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             Box ylo_edge = ylo; ylo_edge.setSmall(1,ubound(ylo).y); ylo_edge.setBig(1,ubound(ylo).y);
             Box yhi_edge = yhi; yhi_edge.setSmall(1,lbound(yhi).y); yhi_edge.setBig(1,lbound(yhi).y);
 
+            // Corner avoidance must be measured from the DOMAIN, not from the
+            // local box. `grow(b, IntVect(0,-1,0))` drops the first and last
+            // row of whatever box it is handed. With a single box that is the
+            // domain's corners, which is the intent. With several boxes
+            // stacked in y it ALSO drops the rows either side of every
+            // internal box boundary, so both the boundary condition and the
+            // outward ghost copy skip them and the answer depends on how the
+            // domain was carved.
+            //
+            // Measured: 1 box vs 4 boxes, same binary and inputs, v differed
+            // by up to 1 m/s, and at step 2 the differences were confined to
+            // j=233 (the internal box edge, 465/2) at i=0 and i=396 (the west
+            // and east domain edges), all 50 levels.
+            //
+            // These two boxes reproduce the single-box cell set exactly for
+            // any decomposition.
+            Box dom_grown = amrex::grow(domain, mf_to_fill.nGrowVect());
+            Box tang_x = dom_grown; tang_x.grow(1,-1); // x-normal edges: trim in y
+            Box tang_y = dom_grown; tang_y.grow(0,-1); // y-normal edges: trim in x
+
             Box xlo_ghost = xlo; xlo_ghost.setBig(0,ubound(xlo).x-1);
             Box xhi_ghost = xhi; xhi_ghost.setSmall(0,lbound(xhi).x+1);
             Box ylo_ghost = ylo; ylo_ghost.setBig(1,ubound(ylo).y-1);
@@ -245,7 +265,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             // Even though we don't loop over xlo itself, this is the right condition to check, since xlo_edge will always be the same for each grid,
             // but if the grid doesn't include the low x-boundary, the xlo box will be invalid and the execution will be skipped.
             if (!xlo.isEmpty() && apply_west) {
-                ParallelFor(grow(xlo_edge,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(xlo_edge & tang_x, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     // ROMS set_tides.f90:704-719 (zeta_west), 849-868 (ubar/vbar_west)
                     Real tide_zeta_val = add_tides ?
@@ -327,7 +347,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
-                ParallelFor(grow(xlo_ghost,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(xlo_ghost & tang_x, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     dest_arr(i,j,k,icomp+icomp_to_fill) = dest_arr(ubound(xlo).x,j,k,icomp+icomp_to_fill);
                 });
@@ -335,7 +355,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
 
             // See comment on xlo
             if (!xhi.isEmpty() && apply_east) {
-                ParallelFor(grow(xhi_edge,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(xhi_edge & tang_x, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     // ROMS set_tides.f90:721-736 (zeta_east), 870-889 (ubar/vbar_east)
                     Real tide_zeta_val = add_tides ?
@@ -405,7 +425,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
-                ParallelFor(grow(xhi_ghost,IntVect(0,-1,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(xhi_ghost & tang_x, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     dest_arr(i,j,k,icomp+icomp_to_fill) = dest_arr(lbound(xhi).x,j,k,icomp+icomp_to_fill);
                 });
@@ -413,7 +433,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
 
             // See comment on xlo
             if (!ylo.isEmpty() && apply_south) {
-                ParallelFor(grow(ylo_edge,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(ylo_edge & tang_y, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     // ROMS set_tides.f90:738-753 (zeta_south), 891-910 (ubar/vbar_south)
                     Real tide_zeta_val = add_tides ?
@@ -487,7 +507,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
-                ParallelFor(grow(ylo_ghost,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(ylo_ghost & tang_y, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     dest_arr(i,j,k,icomp+icomp_to_fill) = dest_arr(i,ubound(ylo).y,k,icomp+icomp_to_fill);
                 });
@@ -495,7 +515,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
 
             // See comment on xlo
             if (!yhi.isEmpty() && apply_north) {
-                ParallelFor(grow(yhi_edge,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(yhi_edge & tang_y, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     // ROMS set_tides.f90:755-770 (zeta_north), 912-931 (ubar/vbar_north)
                     Real tide_zeta_val = add_tides ?
@@ -565,7 +585,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
-                ParallelFor(grow(yhi_ghost,IntVect(-1,0,0)), [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                ParallelFor(yhi_ghost & tang_y, [=] AMREX_GPU_DEVICE (int i, int j, int k)
                 {
                     dest_arr(i,j,k,icomp+icomp_to_fill) = dest_arr(i,lbound(yhi).y,k,icomp+icomp_to_fill);
                 });
