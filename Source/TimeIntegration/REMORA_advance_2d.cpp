@@ -81,6 +81,13 @@ REMORA::advance_2d (int lev,
     int ntfirst = 0;
 
     int knew = 3;
+    // These closed forms replace ROMS's stateful indx1/next_indx1 toggling
+    // (main3d.F). They agree with ROMS only when nfast is ODD, because that is
+    // what makes indx1 flip parity exactly once per baroclinic step. With an
+    // even nfast the two desynchronise after the first step and every
+    // subsequent barotropic substep reads the wrong time level. NDTFAST=44
+    // gives nfast=61, so Moana is safe. The parity is asserted once in
+    // set_weights rather than here, which runs every barotropic substep.
     int krhs = (my_iif + iic) % 2 + 1;
     int kstp = my_iif <=1 ? iic % 2 + 1 : (iic % 2 + my_iif % 2 + 1) % 2 + 1;
     int indx1 = krhs;
@@ -409,8 +416,10 @@ REMORA::advance_2d (int lev,
 
         // todo: gzeta
 
-        // todo: HACKHACKHACK Should use rho0 from prob.H
-        Real fac=Real(1000.0)/Real(1025.0);
+        // ROMS step2d.F: fac = 1000/rho0. Hard-coding 1025 in the denominator
+        // happens to be right for Moana and silently wrong for every other
+        // rho0, with no error and no warning.
+        Real fac=Real(1000.0)/solverChoice.rho0;
 
         if (my_iif==0) {
             Real cff1=dtfast_lev;

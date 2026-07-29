@@ -170,4 +170,15 @@ void REMORA::set_weights (int /*lev*/) {
         weight1[i-1]=wsum*weight1[i-1];
         weight2[i-1]=cff*weight2[i-1];
     }
+
+    // advance_2d derives the barotropic time indices krhs/kstp from closed
+    // forms in my_iif and iic, replacing ROMS's stateful indx1/next_indx1
+    // toggling (main3d.F). Those closed forms reproduce ROMS only when nfast
+    // is odd, since that is what makes indx1 flip parity exactly once per
+    // baroclinic step. With an even nfast they desynchronise after the first
+    // step and every subsequent substep reads the wrong time level, silently.
+    // NDTFAST=44 gives nfast=61, but nothing else enforces this.
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(nfast % 2 == 1,
+        "barotropic time-index closed forms in advance_2d require an odd nfast; "
+        "this ndtfast produces an even one and would desynchronise from ROMS");
 }
