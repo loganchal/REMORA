@@ -619,6 +619,12 @@ public:
      * bulk_fluxes lambda, kept only so it can be written out and differenced
      * against ROMS's formula. Diagnostic; nothing reads it. */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_qsp_diag;
+
+    /** first-guess Wstar (m/s) from the bulk-flux initial-guess block, captured
+     * before the COARE iteration. The 4.3e-06 flux discrepancy is fully present
+     * after one pass, so this is the quantity to difference against ROMS.
+     * Diagnostic; nothing reads it. */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_wstar_diag;
     /** \brief Brunt-Vaisala frequency (3D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_bvf;
     /** \brief Thermal expansion coefficient (3D) */

@@ -62,6 +62,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
         Array4<Real> const& sustr = mf_sustr->array(mfi);
         // diagnostic: the derived specific humidity, for ROMS comparison
         Array4<Real> const& qsp_diag = vec_qsp_diag[lev]->array(mfi);
+        Array4<Real> const& wstar_diag = vec_wstar_diag[lev]->array(mfi);
         Array4<Real> const& svstr = mf_svstr->array(mfi);
         Array4<Real> const& stflux = mf_stflux->array(mfi);
         Array4<Real> const& lrflx = mf_lrflx->array(mfi);
@@ -289,6 +290,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             // First guesses for Monon-Obukhov similarity scales.
             Wstar=delW*vonKar/(std::log(blk_ZW/Zo10)-
                                 bulk_psiu(blk_ZW/L10));
+            wstar_diag(i,j,0) = Wstar;   // first guess, before the iteration
             Real Tstar=-(delT-delTc)*vonKar/(std::log(blk_ZT/ZoT10)-
                                          bulk_psit(blk_ZT/L10));
             Real Qstar=-(delQ-delQc)*vonKar/(std::log(blk_ZQ/ZoT10)-
