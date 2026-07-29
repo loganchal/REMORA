@@ -563,6 +563,29 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             ncf.var("Tair").put_attr("coordinates","x_rho y_rho ocean_time");
             ncf.var("Tair").put_attr("field","Tair, scalar, series");
 
+            // 10-m winds. Written for ROMS parity work: the bulk flux
+            // algorithm and its constants are verified matching, yet every
+            // quantity it computes differs, so the wind as delivered to it is
+            // the remaining untested input. ROMS exposes these via
+            // Hout(idUair)/Hout(idVair).
+            ncf.def_var("Uwind", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
+            ncf.var("Uwind").put_attr("long_name","surface u-wind component");
+            ncf.var("Uwind").put_attr("units","meter second-1");
+            ncf.var("Uwind").put_attr("time","ocean_time");
+            ncf.var("Uwind").put_attr("grid","grid");
+            ncf.var("Uwind").put_attr("location","face");
+            ncf.var("Uwind").put_attr("coordinates","x_rho y_rho ocean_time");
+            ncf.var("Uwind").put_attr("field","Uwind, scalar, series");
+
+            ncf.def_var("Vwind", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
+            ncf.var("Vwind").put_attr("long_name","surface v-wind component");
+            ncf.var("Vwind").put_attr("units","meter second-1");
+            ncf.var("Vwind").put_attr("time","ocean_time");
+            ncf.var("Vwind").put_attr("grid","grid");
+            ncf.var("Vwind").put_attr("location","face");
+            ncf.var("Vwind").put_attr("coordinates","x_rho y_rho ocean_time");
+            ncf.var("Vwind").put_attr("field","Vwind, scalar, series");
+
             // Surface air pressure (Pascal)
             ncf.def_var("Pair", ncutils::NCDType::Real,{ nt_name, ny_r_name, nx_r_name });
             ncf.var("Pair").put_attr("long_name","surface air pressure");
@@ -1021,6 +1044,24 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     auto nc_plot_var = ncf.var("Tair");
                     nc_plot_var.put(tmp_Tair.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
                 }
+                // Uwind / Vwind (parity diagnostic, see the def block above)
+                {
+                    FArrayBox tmp_uw;
+                    tmp_uw.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
+                    tmp_uw.template copy<RunOn::Device>((*vec_uwind[lev])[mfi.index()], 0, 0, 1);
+                    Gpu::streamSynchronize();
+                    auto nc_plot_var = ncf.var("Uwind");
+                    nc_plot_var.put(tmp_uw.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
+                }
+                {
+                    FArrayBox tmp_vw;
+                    tmp_vw.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
+                    tmp_vw.template copy<RunOn::Device>((*vec_vwind[lev])[mfi.index()], 0, 0, 1);
+                    Gpu::streamSynchronize();
+                    auto nc_plot_var = ncf.var("Vwind");
+                    nc_plot_var.put(tmp_vw.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
+                }
+
                 // Pair
                 {
                     FArrayBox tmp_Pair;
