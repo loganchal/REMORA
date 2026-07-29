@@ -215,6 +215,10 @@ remora.plot_file          = nz5km_his
 remora.plot_int           = 36
 remora.plot_vars_3d       = salt temp x_velocity y_velocity
 remora.plot_vars_2d       = zeta ubar vbar
+# One hourly record of this grid is ~310 MB, so a month in one file overflows
+# what the writer can address ("Integer type casting overflow"). REMORA sizes
+# chunks to ~2 GB automatically when this is on; it defaults to off.
+remora.chunk_history_file = true
 
 remora.check_file = chk
 remora.check_int  = 864
