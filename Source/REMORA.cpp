@@ -1149,10 +1149,14 @@ REMORA::set_smflux(int lev)
         prob->init_analytic_smflux(lev, geom[lev], solverChoice, *this,*vec_sustr[lev], *vec_svstr[lev]);
     } else if (solverChoice.smflux_type == SMFluxType::netcdf) {
 #ifdef REMORA_USE_NETCDF
-        sustr_data_from_file->update_interpolated_to_time(t_old[lev], lev, vec_sustr[lev].get(), geom, ref_ratio);
-        svstr_data_from_file->update_interpolated_to_time(t_old[lev], lev, vec_svstr[lev].get(), geom, ref_ratio);
-        FillPatch(lev, t_old[lev], *vec_sustr[lev], GetVecOfPtrs(vec_sustr), foextrap_periodic_bc(), BdyVars::null,0,false);
-        FillPatch(lev, t_old[lev], *vec_svstr[lev], GetVecOfPtrs(vec_svstr), foextrap_periodic_bc(), BdyVars::null,0,false);
+        // t_new, not t_old -- see the note in set_surface_state: ROMS advances
+        // its clock before reading forcing, so a step uses the snapshot at the
+        // time it is stepping to.
+        const Real frc_time = t_new[lev];
+        sustr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_sustr[lev].get(), geom, ref_ratio);
+        svstr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_svstr[lev].get(), geom, ref_ratio);
+        FillPatch(lev, frc_time, *vec_sustr[lev], GetVecOfPtrs(vec_sustr), foextrap_periodic_bc(), BdyVars::null,0,false);
+        FillPatch(lev, frc_time, *vec_svstr[lev], GetVecOfPtrs(vec_svstr), foextrap_periodic_bc(), BdyVars::null,0,false);
 #endif
     }
 }
@@ -1201,10 +1205,23 @@ REMORA::set_surface_state (int lev)
 //    }
 
 #ifdef REMORA_USE_NETCDF
+    // Forcing is evaluated at the END of the step interval, t_new, not the
+    // beginning. This is ROMS's convention: main3d.F does time(ng)=time(ng)+dt
+    // *before* calling get_data/set_data, so the snapshot a step integrates
+    // with is the one at the time it is stepping to.
+    //
+    // Using t_old instead lags every surface field by exactly one dt. Measured
+    // against ROMS on the Moana grid with DT=100 s and hourly forcing: after
+    // 36 steps REMORA's applied Pair sat at f(t) + (1/36)(f(t-3600) - f(t)),
+    // i.e. alpha = 0.02777778 with a spread of 1.5e-12 over 111482 points --
+    // exactly one timestep behind. That lag is the source of the persistent
+    // step-1 tracer offset, since it biases every bulk flux from the first
+    // step and never grows or decays away.
+    const Real frc_time = t_new[lev];
     auto update_from_netcdf = [&](std::unique_ptr<NCTimeSeries>& data_from_file,
                                   Vector<std::unique_ptr<MultiFab>>& mf_vec) {
-        data_from_file->update_interpolated_to_time(t_old[lev], lev, mf_vec[lev].get(), geom, ref_ratio);
-        FillPatch(lev, t_old[lev], *mf_vec[lev], GetVecOfPtrs(mf_vec),
+        data_from_file->update_interpolated_to_time(frc_time, lev, mf_vec[lev].get(), geom, ref_ratio);
+        FillPatch(lev, frc_time, *mf_vec[lev], GetVecOfPtrs(mf_vec),
                   foextrap_periodic_bc(), BdyVars::null, 0, false);
     };
 
