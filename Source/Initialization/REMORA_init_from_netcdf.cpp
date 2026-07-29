@@ -355,19 +355,41 @@ REMORA::init_zeta_from_netcdf (int lev)
                   0, false,false,0,0,zero,*vec_zeta[lev]);
     }
 
-    // Restore the initial file's own values everywhere it covers.
+    // Restore the initial file's own values everywhere it covers -- but only
+    // when ROMS would not have applied zetabc either.
     //
-    // ROMS applies no lateral boundary condition at initialisation: zetabc is
-    // called from step2d, so the state ROMS starts from is byte-for-byte the
-    // ini file, ghost rows included (its rho arrays run 0:Lm+1 and the file
-    // carries those rows). The physbcs/fill_from_bdyfiles calls above are still
-    // needed to populate REMORA's OUTER ghosts, which the file does not reach,
-    // but they must not be allowed to alter the cells the file does provide.
+    // ini_fields.f90:1098 guards the init zetabc calls with
+    //   IF (.not.(ANY(LBC(:,isFsur)%radiation) .or.
+    //             ANY(LBC(:,isFsur)%Chapman_explicit) .or.
+    //             ANY(LBC(:,isFsur)%Chapman_implicit)))
+    // Moana sets LBC(isFsur) = Cha, so the guard is false, ROMS never applies
+    // it, and its t=0 sea level is byte-for-byte the ini file. Under a CLAMPED
+    // free surface the guard is TRUE and ROMS does apply the condition, so
+    // restoring unconditionally is wrong there -- measured, it left the whole
+    // zeta ring 1724 of 1724 points out, by up to 9e-01 m, in a clamped
+    // bisection run. Replicate the guard rather than hard-coding the Moana
+    // case.
+    //
+    // The physbcs/fill_from_bdyfiles calls above are still needed to populate
+    // REMORA's OUTER ghosts, which the file does not reach, but where ROMS
+    // skips the condition they must not alter the cells the file provides.
     //
     // Measured: without this, sea level on the boundary rows differs from ROMS
     // by up to 4.9e-03 m before a single step is taken, and the first step
     // amplifies that to 1.8e-01 m, which then radiates inward at sqrt(gH).
-    for (int idx = 0; idx < num_boxes_at_level[lev]; idx++)
+    bool zeta_bc_skipped_at_init = false;
+    for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
+        for (int lohi = 0; lohi < 2; lohi++) {
+            const int t = lohi == 0 ? domain_bcs_type[zeta_bc()].lo(dir)
+                                    : domain_bcs_type[zeta_bc()].hi(dir);
+            if (t == REMORABCType::chapman || t == REMORABCType::orlanski_rad ||
+                t == REMORABCType::orlanski_rad_nudge) {
+                zeta_bc_skipped_at_init = true;
+            }
+        }
+    }
+
+    for (int idx = 0; zeta_bc_skipped_at_init && idx < num_boxes_at_level[lev]; idx++)
     {
         for ( MFIter mfi(*vec_zeta[lev], false); mfi.isValid(); ++mfi )
         {
