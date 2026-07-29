@@ -10,6 +10,8 @@
 
 using namespace amrex;
 
+bool REMORA::bc_debug_once = true;
+
 amrex::Real REMORA::startCPUTime        = zero;
 amrex::Real REMORA::previousCPUTimeUsed = zero;
 

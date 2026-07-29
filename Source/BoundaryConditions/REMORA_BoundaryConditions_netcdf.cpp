@@ -182,6 +182,26 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             Box ylo_ghost = ylo; ylo_ghost.setBig(1,ubound(ylo).y-1);
             Box yhi_ghost = yhi; yhi_ghost.setSmall(1,lbound(yhi).y+1);
 
+            // One-shot diagnostic: which rows are the condition and the
+            // outward copy actually writing, and which BC branch is taken?
+            // Three attempts at this defect were made by reasoning about the
+            // index arithmetic and all three were wrong, so print it instead.
+            if (REMORA::bc_debug_once) {
+                REMORA::bc_debug_once = false;
+                amrex::AllPrint() << "[bcdbg] mf_box y " << lbound(mf_box).y << ".." << ubound(mf_box).y
+                                  << "  dom_hi.y " << dom_hi.y
+                                  << "  yhi y " << lbound(yhi).y << ".." << ubound(yhi).y
+                                  << "  yhi_edge y " << lbound(yhi).y
+                                  << "  yhi_ghost y " << lbound(yhi).y+1 << ".." << ubound(yhi).y
+                                  << "  bc.hi(1) " << bcr.hi(1)
+                                  << "  (clamped=" << REMORABCType::clamped
+                                  << " chapman=" << REMORABCType::chapman
+                                  << " flather=" << REMORABCType::flather
+                                  << " orlanski_rad_nudge=" << REMORABCType::orlanski_rad_nudge
+                                  << " foextrap=" << REMORABCType::foextrap << ")"
+                                  << "  null_mf_calc " << null_mf_calc << std::endl;
+            }
+
             const Array4<Real>& dest_arr = mf_to_fill.array(mfi);
             const Array4<const Real>& mask_arr = mf_mask.array(mfi);
             const Array4<const Real>& calc_arr = (!null_mf_calc) ? mf_calc.array(mfi) : Array4<amrex::Real>();

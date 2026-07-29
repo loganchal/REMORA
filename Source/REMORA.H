@@ -1254,6 +1254,9 @@ public:
     /** \brief Problem initialization from NetCDF file */
     void init_data_from_netcdf (int lev);
 
+    /** One-shot boundary-box diagnostic flag (parity work). */
+    static bool bc_debug_once;
+
     /** Zero every land point of the initial state, as ROMS does on read. */
     void mask_land_in_initial_state (int lev);
     /** \brief High resolution roblem initialization from NetCDF file */
