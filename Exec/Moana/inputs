@@ -215,6 +215,12 @@ remora.plot_vars_2d       = zeta ubar vbar
 # what the writer can address ("Integer type casting overflow"). REMORA sizes
 # chunks to ~2 GB automatically when this is on; it defaults to off.
 remora.chunk_history_file = true
+# Emit the surface forcing REMORA actually applied (qnet, swrad, latent,
+# ssflux, Pair, sustr/svstr). Defaults to false, which is why an earlier
+# attempt to compare heat flux against ROMS's shflux found no field to read:
+# the writer supports it, nothing had asked for it. Needed to close out the
+# last untested candidate for the step-1 offset.
+remora.output_forcing     = true
 
 remora.check_file = chk
 remora.check_int  = 864
