@@ -83,8 +83,37 @@ REMORA::set_2darrays (int lev)
 {
     auto N = Geom(lev).Domain().size()[2]-1; // Number of vertical "levs" aka, NZ
 
-    vec_ubar[lev]->setVal(zero);
-    vec_vbar[lev]->setVal(zero);
+    // ROMS recomputes ubar/vbar from the vertical integral of u/v over
+    // IstrM..IendB / JstrB..JendB (ini_fields.f90:727), which EXCLUDES the
+    // domain-boundary faces -- those keep the values read from the ini file.
+    // Measured: ROMS's ubar on the outermost ring is bit-identical to the ini
+    // at 1722 of 1722 points, while its interior is the recomputed integral.
+    //
+    // REMORA zeroed the whole MultiFab and then integrated over a grown box,
+    // so the ring got the integral instead of the file value. The two agree
+    // only to float32 (the file's ubar was itself derived from u), leaving a
+    // 4.47e-08 residual on 749 ring points that seeded the barotropic
+    // solution. Keep the file values there.
+    const bool keep_bdry_from_file = solverChoice.init_ubar_from_file;
+    if (!keep_bdry_from_file) {
+        vec_ubar[lev]->setVal(zero);
+        vec_vbar[lev]->setVal(zero);
+    }
+
+    const Box& dom = Geom(lev).Domain();
+    // Valid u faces are x in [lo.x, hi.x+1]; dropping the two end faces
+    // leaves the interior ones. In y, u is cell-centred, so clipping to the
+    // domain range drops the j=-1 and j=hi.y+1 ghost rows that make up the
+    // rest of the ring. v is the transpose.
+    // Index types must match the boxes these get intersected with (ubx2 is
+    // x-face-centred, vbx2 y-face-centred); AMReX asserts on a mixed-type
+    // intersection rather than doing something quietly wrong.
+    Box ubx_interior(IntVect(dom.smallEnd(0)+1, dom.smallEnd(1), 0),
+                     IntVect(dom.bigEnd(0),     dom.bigEnd(1),   0),
+                     IndexType(IntVect(1,0,0)));
+    Box vbx_interior(IntVect(dom.smallEnd(0),   dom.smallEnd(1)+1, 0),
+                     IntVect(dom.bigEnd(0),     dom.bigEnd(1),     0),
+                     IndexType(IntVect(0,1,0)));
 
     MultiFab* U_old = xvel_new[lev];
     MultiFab* V_old = yvel_new[lev];
@@ -106,7 +135,11 @@ REMORA::set_2darrays (int lev)
         Box ubx2 = mfi.nodaltilebox(0); ubx2.grow(IntVect(NGROW  ,NGROW  ,0)); // x-face-centered, grown by 2
         Box vbx2 = mfi.nodaltilebox(1); vbx2.grow(IntVect(NGROW  ,NGROW  ,0)); // y-face-centered, grown by 2
 
-        ParallelFor(makeSlab(ubx2,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
+        Box ubx_do = makeSlab(ubx2,2,0);
+        Box vbx_do = makeSlab(vbx2,2,0);
+        if (keep_bdry_from_file) { ubx_do &= ubx_interior; vbx_do &= vbx_interior; }
+
+        ParallelFor(ubx_do, [=] AMREX_GPU_DEVICE (int i, int j, int )
         {
             Real CF = zero;
             Real sum_of_hz = zero;
@@ -119,7 +152,7 @@ REMORA::set_2darrays (int lev)
             ubar(i,j,0,0) = CF / sum_of_hz;
         });
 
-        ParallelFor(makeSlab(vbx2,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int )
+        ParallelFor(vbx_do, [=] AMREX_GPU_DEVICE (int i, int j, int )
         {
             Real CF = zero;
             Real sum_of_hz = zero;
