@@ -193,12 +193,6 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                                   << "  yhi y " << lbound(yhi).y << ".." << ubound(yhi).y
                                   << "  yhi_edge y " << lbound(yhi).y
                                   << "  yhi_ghost y " << lbound(yhi).y+1 << ".." << ubound(yhi).y
-                                  << "  bc.hi(1) " << bcr.hi(1)
-                                  << "  (clamped=" << REMORABCType::clamped
-                                  << " chapman=" << REMORABCType::chapman
-                                  << " flather=" << REMORABCType::flather
-                                  << " orlanski_rad_nudge=" << REMORABCType::orlanski_rad_nudge
-                                  << " foextrap=" << REMORABCType::foextrap << ")"
                                   << "  null_mf_calc " << null_mf_calc << std::endl;
             }
 
