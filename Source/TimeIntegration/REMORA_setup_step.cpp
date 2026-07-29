@@ -350,6 +350,12 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     mf_W.FillBoundary(geom[lev].periodicity());
     (*physbcs[lev])(mf_W,*mf_mskr.get(),0,1,mf_W.nGrowVect(),t_new[lev],zvel_bc());
 
+    // Pair availability must be checked OUTSIDE any MFIter loop:
+    // MultiFab::ok() constructs an MFIter, and AMReX forbids nesting.
+    if (solverChoice.atm_press && !(vec_Pair[lev] && vec_Pair[lev]->ok())) {
+        amrex::Abort("remora.atm_press=true but no surface air pressure (Pair) forcing is loaded");
+    }
+
 #ifdef REMORA_USE_NETCDF
     // Get u and v climatology if we're going to do nudging
     if (solverChoice.do_m3_clim_nudg) {
@@ -456,9 +462,9 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
             FC(i,j,k)=zero;
         });
 
-        if (solverChoice.atm_press && !(vec_Pair[lev] && vec_Pair[lev]->ok())) {
-            amrex::Abort("remora.atm_press=true but no surface air pressure (Pair) forcing is loaded");
-        }
+        // NOTE: the Pair availability check is hoisted above this MFIter loop.
+        // MultiFab::ok() constructs an MFIter internally, so calling it here
+        // trips AMReX's "Nested or multiple active MFIters" assertion.
         const Array4<Real const> Pair_arr = (solverChoice.atm_press) ?
             vec_Pair[lev]->const_array(mfi) : Array4<Real const>{};
 
