@@ -608,6 +608,19 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             ncf.var("Wstar").put_attr("coordinates","x_rho y_rho ocean_time");
             ncf.var("Wstar").put_attr("field","Wstar, scalar, series");
 
+            // rufrc: vertically integrated baroclinic forcing of the barotropic
+            // mode, as handed to the barotropic solver once per baroclinic step.
+            // ROMS's COUPLING(ng)%rufrc, exposed there via the evap slot in the
+            // RUFRC_DIAG build. Written with ubar's dims and through ubar's
+            // staging path, since vec_rufrc shares ubar's staggering and that
+            // path is verified (REMORA ubar matches ROMS to 5e-16).
+            ncf.def_var("rufrc", ncutils::NCDType::Real, {nt_name, ny_u_name, nx_u_name });
+            ncf.var("rufrc").put_attr("long_name","vertically integrated baroclinic forcing of ubar");
+            ncf.var("rufrc").put_attr("time","ocean_time");
+            ncf.var("rufrc").put_attr("grid","grid");
+            ncf.var("rufrc").put_attr("coordinates","x_u y_u ocean_time");
+            ncf.var("rufrc").put_attr("field","rufrc, scalar, series");
+
             ncf.def_var("Wgus", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
             ncf.var("Wgus").put_attr("long_name","bulk flux gustiness");
             ncf.var("Wgus").put_attr("units","meter second-1");
@@ -1480,6 +1493,16 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                 Gpu::streamSynchronize();
 
                 auto nc_plot_var = ncf.var("ubar");
+                nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
+            }
+            {
+                // rufrc, same staging as ubar directly above.
+                FArrayBox tmp;
+                tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
+                tmp.template copy<RunOn::Device>((*vec_rufrc[lev])[mfi.index()], 0, 0, 1);
+                Gpu::streamSynchronize();
+
+                auto nc_plot_var = ncf.var("rufrc");
                 nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
             }
             {
