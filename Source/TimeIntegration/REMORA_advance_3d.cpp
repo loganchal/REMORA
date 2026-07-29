@@ -188,8 +188,14 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
             // t_new, not t_old: ROMS's set_data runs after the clock advances,
             // so boundary data is the snapshot at the time being stepped to.
             // See the note in Advance() on set_tides.
-            fill_from_bdyfiles(lev, mf_u,*mf_msku,t_new[lev],xvel_bc(),BdyVars::u,0,0,*xvel_old[lev],dt_lev);
-            fill_from_bdyfiles(lev, mf_v,*mf_mskv,t_new[lev],yvel_bc(),BdyVars::v,0,0,*yvel_old[lev],dt_lev);
+            // t_old, not t_new: ROMS evaluates open-boundary data at the time
+            // the step STARTS (see the note in advance_2d). This is the 3D
+            // momentum boundary for the SINGLE-LEVEL path -- max_level == 0
+            // takes timeStep(), so the u/v FillPatch in TimeStepML.cpp never
+            // runs for Moana and this direct call is the only place u and v
+            // read the boundary file.
+            fill_from_bdyfiles(lev, mf_u,*mf_msku,t_old[lev],xvel_bc(),BdyVars::u,0,0,*xvel_old[lev],dt_lev);
+            fill_from_bdyfiles(lev, mf_v,*mf_mskv,t_old[lev],yvel_bc(),BdyVars::v,0,0,*yvel_old[lev],dt_lev);
         }
 
     if (solverChoice.do_rivers) {
