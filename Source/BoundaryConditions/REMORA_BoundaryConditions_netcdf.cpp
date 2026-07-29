@@ -296,8 +296,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         // gradient develops along the edge.
                         Real Ce = std::min(cff, std::max(dTdt*dTde, -cff));
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_lo.x+mf_index_type[0],j,k,icomp+icomp_to_fill)
-                                - std::max(Ce,zero) * grad_lo_im1
-                                - std::min(Ce,zero) * grad_lo_imjp1) / (cff+Cx);
+                                - std::max(Ce,Real(0.0)) * grad_lo_im1
+                                - std::min(Ce,Real(0.0)) * grad_lo_imjp1) / (cff+Cx);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -370,8 +370,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real Cx = dTdt * dTdx;
                         Real Ce = std::min(cff, std::max(dTdt*dTde, -cff));
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_hi.x-mf_index_type[0],j,k,icomp+icomp_to_fill)
-                                - std::max(Ce,zero) * grad_hi_ip1
-                                - std::min(Ce,zero) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Cx);
+                                - std::max(Ce,Real(0.0)) * grad_hi_ip1
+                                - std::min(Ce,Real(0.0)) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Cx);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -448,8 +448,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         // one, applied to the ghost-ROW gradients.
                         Real Cx = std::min(cff, std::max(dTdt*dTdx, -cff));
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce * dest_arr(i,dom_lo.y+mf_index_type[1],k,icomp+icomp_to_fill)
-                                - std::max(Cx,zero) * grad_lo_jm1
-                                - std::min(Cx,zero) * grad_lo_ipjm1) / (cff+Ce);
+                                - std::max(Cx,Real(0.0)) * grad_lo_jm1
+                                - std::min(Cx,Real(0.0)) * grad_lo_ipjm1) / (cff+Ce);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -522,8 +522,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real Ce = dTdt*dTde;
                         Real Cx = std::min(cff, std::max(dTdt*dTdx, -cff));
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (cff*calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce*dest_arr(i,dom_hi.y-mf_index_type[1],k,icomp+icomp_to_fill)
-                                - std::max(Cx,zero) * grad_hi_jp1
-                                - std::min(Cx,zero) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Ce);
+                                - std::max(Cx,Real(0.0)) * grad_hi_jp1
+                                - std::min(Cx,Real(0.0)) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Ce);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
