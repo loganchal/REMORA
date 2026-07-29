@@ -290,7 +290,6 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             // First guesses for Monon-Obukhov similarity scales.
             Wstar=delW*vonKar/(std::log(blk_ZW/Zo10)-
                                 bulk_psiu(blk_ZW/L10));
-            wstar_diag(i,j,0) = Wstar;   // first guess, before the iteration
             Real Tstar=-(delT-delTc)*vonKar/(std::log(blk_ZT/ZoT10)-
                                          bulk_psit(blk_ZT/L10));
             Real Qstar=-(delQ-delQc)*vonKar/(std::log(blk_ZQ/ZoT10)-
@@ -339,6 +338,13 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
                 }
                 delW=std::sqrt(wind_mag*wind_mag+Wgus*Wgus);
             }
+
+            // Captured AFTER the iteration, to match where ROMS's
+            // WSTAR_DIAG patch reads it (bulk_flux.F, at the evap
+            // assignment, which is past the loop). Capturing the
+            // first guess here instead compared two different
+            // quantities and showed a spurious 18% difference.
+            wstar_diag(i,j,0) = Wstar;
 
             // Compute transfer coefficients for momentum (Cd).
             Real Wspeed=std::sqrt(wind_mag*wind_mag+Wgus*Wgus);
