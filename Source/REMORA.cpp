@@ -442,20 +442,9 @@ REMORA::InitData ()
         }
 
         if (restart_chkfile == "") {
-            // BdyVars::null, not ::t/::u/::v: at initialisation ROMS applies
-            // the boundary CONDITION (ini_fields.f90:850,855 call t3dbc_tile,
-            // :675-691 call u3dbc/v3dbc), it does not hard-fill the ghost from
-            // the boundary file. The distinction is invisible during stepping
-            // but decisive here, because at init nstp and nout hold the same
-            // state, so dTdt = 0, Cx = Ce = 0, and the radiation collapses to
-            // pure nudging toward the boundary data -- a small correction.
-            // Overwriting outright instead put the ghost ring 5.3 degC from
-            // ROMS before the first step (ROMS moves it by 2.6e-04 median).
-            // Passing ::null still runs physbcs, which carries the
-            // radiation-plus-nudging, and skips only fill_from_bdyfiles.
-            FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::null, 0, true, false,0,0,zero,*cons_new[lev]);
-            FillPatch(lev, t_new[lev], *xvel_new[lev], xvel_new, xvel_bc(), BdyVars::null, 0, true, false,0,0,zero,*xvel_new[lev]);
-            FillPatch(lev, t_new[lev], *yvel_new[lev], yvel_new, yvel_bc(), BdyVars::null, 0, true, false,0,0,zero,*yvel_new[lev]);
+            FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t, 0, true, false,0,0,zero,*cons_new[lev]);
+            FillPatch(lev, t_new[lev], *xvel_new[lev], xvel_new, xvel_bc(), BdyVars::u, 0, true, false,0,0,zero,*xvel_new[lev]);
+            FillPatch(lev, t_new[lev], *yvel_new[lev], yvel_new, yvel_bc(), BdyVars::v, 0, true, false,0,0,zero,*yvel_new[lev]);
             FillPatch(lev, t_new[lev], *zvel_new[lev], zvel_new, zvel_bc(), BdyVars::null, 0, true, false);
 
             // Copy from new into old just in case when initializing from scratch
