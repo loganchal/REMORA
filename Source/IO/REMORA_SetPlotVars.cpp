@@ -63,6 +63,13 @@ REMORA::set3DPlotVariables (const std::string& pp_plot_var_names_3d)
         tmp_plot_names.push_back("z_velocity");
     }
 
+    // Vertical mixing coefficients (cell-centred from their w-faces)
+    for (const auto& ak : {"Akv", "Akt", "Aks"}) {
+        if (containerHasElement(plot_var_names_3d, ak)) {
+            tmp_plot_names.push_back(ak);
+        }
+    }
+
     // If we are asked for any location component, we will provide them all
     if (containerHasElement(plot_var_names_3d, "x_cc") ||
         containerHasElement(plot_var_names_3d, "y_cc") ||

@@ -378,6 +378,25 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         ncf.var("zeta").put_attr("coordinates","x_rho y_rho ocean_time");
         ncf.var("zeta").put_attr("field","free-surface, scalar, series");
 
+        // Vertical mixing coefficients, cell-centred. ROMS writes AKv/AKt on
+        // w-points; these are the rho-point average, so a comparison must
+        // average the ROMS field the same way.
+        for (const auto& akname : {"Akv", "Akt", "Aks"}) {
+            int comp = -1;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == akname) comp = i;
+            }
+            if (comp >= 0) {
+                ncf.def_var_fill(akname, ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
+                ncf.var(akname).put_attr("long_name", std::string(akname) + " vertical mixing coefficient (rho-point average of the w-face values)");
+                ncf.var(akname).put_attr("units","meter2 second-1");
+                ncf.var(akname).put_attr("time","ocean_time");
+                ncf.var(akname).put_attr("grid","grid");
+                ncf.var(akname).put_attr("location","face");
+                ncf.var(akname).put_attr("coordinates","x_rho y_rho s_rho ocean_time");
+            }
+        }
+
         {
             int comp = -1;
             for (int i = 0; i < names_3d.size(); i++) {
@@ -1116,6 +1135,24 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             } // end output forcing
 
             // **************************************************************************
+            // Vertical mixing coefficients (same rho-centred layout as temp)
+            for (const auto& akname : {"Akv", "Akt", "Aks"}) {
+                int comp = -1;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == akname) comp = i;
+                }
+                if (comp >= 0) {
+                    FArrayBox tmp;
+                    tmp.resize(tmp_bx, 1, amrex::The_Pinned_Arena());
+                    tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
+                    Gpu::streamSynchronize();
+
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
+                    nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
+                            local_nz, local_ny, local_nx });
+                }
+            }
+
             { // Temp
                 int comp = -1;
                 for (int i = 0; i < names_3d.size(); i++) {

@@ -334,6 +334,30 @@ REMORA::WritePlotFile (int istep_for_plot)
             mf_comp += 1;
         }
 
+        // Vertical mixing coefficients, averaged from their w-faces to cell
+        // centres (the same treatment w gets above). ROMS writes AKv/AKt on
+        // w-points in every his file; exposing them here makes a direct
+        // ROMS-vs-REMORA comparison of the mixing possible, which is the
+        // decisive test for whether a tracer discrepancy comes from the
+        // turbulence closure.
+        auto copy_ak_to_cc = [&](const std::string& name, MultiFab& src, int scomp)
+        {
+            if (!containerHasElement(plot_var_names_3d, name)) return;
+            for (MFIter mfi(plotMF[lev], TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                const Box& bx = mfi.tilebox();
+                auto const& ak  = src.const_array(mfi, scomp);
+                auto const& out = plotMF[lev].array(mfi, mf_comp);
+                ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                {
+                    out(i,j,k) = Real(0.5) * (ak(i,j,k) + ak(i,j,k+1));
+                });
+            }
+            mf_comp++;
+        };
+        copy_ak_to_cc("Akv", *vec_Akv[lev], 0);
+        copy_ak_to_cc("Akt", *vec_Akt[lev], Temp_comp);
+        copy_ak_to_cc("Aks", *vec_Akt[lev], Salt_comp);
+
         // Define standard process for calling the functions in Derive.cpp
         auto calculate_derived = [&](const std::string& der_name,
                                      decltype(derived::remora_dernull)& der_function)
