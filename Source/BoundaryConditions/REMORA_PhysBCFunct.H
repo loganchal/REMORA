@@ -75,6 +75,13 @@ public:
 
 private:
     int                  m_lev;
+    // Ghost width of the MultiFab currently being filled. Needed so the
+    // corner trim in the impose_*_bcs routines can be measured from the
+    // DOMAIN rather than from the local box: grow(b,IntVect(0,-1,0)) drops
+    // the first and last row of whatever box it is handed, which with several
+    // boxes stacked in y also drops the rows either side of every internal
+    // box boundary and makes the result depend on the decomposition.
+    amrex::IntVect       m_nghost{0,0,0};
     amrex::Geometry      m_geom;
     amrex::Vector<amrex::BCRec>            m_domain_bcs_type;
     amrex::Gpu::DeviceVector<amrex::BCRec> m_domain_bcs_type_d;

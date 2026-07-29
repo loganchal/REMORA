@@ -21,6 +21,8 @@ void REMORAPhysBCFunct::operator() (MultiFab& mf, const MultiFab& msk, int icomp
                                    Real time, int bccomp,int n_not_fill, const MultiFab& mf_calc,
                                    const MultiFab& mf_msku, const MultiFab& mf_mskv)
 {
+    m_nghost = nghost;
+
     if (m_geom.isAllPeriodic()) return;
 
     BL_PROFILE("REMORAPhysBCFunct::()");
