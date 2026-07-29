@@ -286,7 +286,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real dTde = (dTdt * (grad_lo+grad_lo_jp1) > zero) ? grad_lo : grad_lo_jp1;
                         Real cff = std::max(dTdx*dTdx+dTde*dTde,eps);
                         Real Cx = dTdt * dTdx;
-                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_lo.x+mf_index_type[0],j,k,icomp+icomp_to_fill)) / (cff+Cx);
+                        // Tangential radiation term. ROMS t3dbc_im.f90:629-639
+                        // (and u3dbc/v3dbc identically) carries
+                        //   -MAX(Ce,0)*grad(ghost,j) - MIN(Ce,0)*grad(ghost,j+1)
+                        // in the numerator, with Ce clamped to +/-cff. Omitting
+                        // it leaves the boundary purely normally-radiating: it
+                        // agrees while the field is along-boundary uniform
+                        // (dTdt ~ 0 => Ce ~ 0) and diverges as soon as a
+                        // gradient develops along the edge.
+                        Real Ce = std::min(cff, std::max(dTdt*dTde, -cff));
+                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_lo.x+mf_index_type[0],j,k,icomp+icomp_to_fill)
+                                - std::max(Ce,zero) * grad_lo_im1
+                                - std::min(Ce,zero) * grad_lo_imjp1) / (cff+Cx);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_lo.x-1+mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -357,7 +368,10 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real dTde = (dTdt * (grad_hi + grad_hi_jp1) > zero) ? grad_hi : grad_hi_jp1;
                         Real cff = std::max(dTdx*dTdx + dTde*dTde,eps);
                         Real Cx = dTdt * dTdx;
-                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_hi.x-mf_index_type[0],j,k,icomp+icomp_to_fill)) * mask_arr(i,j,0) / (cff+Cx);
+                        Real Ce = std::min(cff, std::max(dTdt*dTde, -cff));
+                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc) + Cx * dest_arr(dom_hi.x-mf_index_type[0],j,k,icomp+icomp_to_fill)
+                                - std::max(Ce,zero) * grad_hi_ip1
+                                - std::min(Ce,zero) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Cx);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(dom_hi.x+1-mf_index_type[0],j,k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -428,7 +442,14 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real dTdx = (dTdt * (grad_lo + grad_lo_ip1) > zero) ? grad_lo : grad_lo_ip1;
                         Real cff = std::max(dTdx*dTdx + dTde*dTde, eps);
                         Real Ce = dTdt*dTde;
-                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce * dest_arr(i,dom_lo.y+mf_index_type[1],k,icomp+icomp_to_fill)) / (cff+Ce);
+                        // Tangential term, ROMS t3dbc_im.f90:884-895. On the
+                        // y-normal edges the roles swap: Ce is the unclamped
+                        // normal coefficient and Cx is the clamped tangential
+                        // one, applied to the ghost-ROW gradients.
+                        Real Cx = std::min(cff, std::max(dTdt*dTdx, -cff));
+                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff * calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce * dest_arr(i,dom_lo.y+mf_index_type[1],k,icomp+icomp_to_fill)
+                                - std::max(Cx,zero) * grad_lo_jm1
+                                - std::min(Cx,zero) * grad_lo_ipjm1) / (cff+Ce);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_lo.y-1+mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
@@ -499,7 +520,10 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real dTdx = (dTdt * (grad_hi + grad_hi_ip1) > zero) ? grad_hi : grad_hi_ip1;
                         Real cff = std::max(dTdx*dTdx + dTde*dTde, eps);
                         Real Ce = dTdt*dTde;
-                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff*calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce*dest_arr(i,dom_hi.y-mf_index_type[1],k,icomp+icomp_to_fill)) * mask_arr(i,j,0) / (cff+Ce);
+                        Real Cx = std::min(cff, std::max(dTdt*dTdx, -cff));
+                        dest_arr(i,j,k,icomp+icomp_to_fill) = (cff*calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc) + Ce*dest_arr(i,dom_hi.y-mf_index_type[1],k,icomp+icomp_to_fill)
+                                - std::max(Cx,zero) * grad_hi_jp1
+                                - std::min(Cx,zero) * grad_hi_ijp1) * mask_arr(i,j,0) / (cff+Ce);
                         dest_arr(i,j,k,icomp+icomp_to_fill) = mask_arr(i,j,0) * (dest_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill) + tau * (bry_val - calc_arr(i,dom_hi.y+1-mf_index_type[1],k,icomp+icomp_to_fill_calc)));
                     }
                 });
