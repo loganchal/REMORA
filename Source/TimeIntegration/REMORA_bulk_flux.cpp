@@ -52,6 +52,8 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
         }
         Array4<Real const> const& cons = mf_cons->const_array(mfi);
         Array4<Real> const& sustr = mf_sustr->array(mfi);
+        // diagnostic: the derived specific humidity, for ROMS comparison
+        Array4<Real> const& qsp_diag = vec_qsp_diag[lev]->array(mfi);
         Array4<Real> const& svstr = mf_svstr->array(mfi);
         Array4<Real> const& stflux = mf_stflux->array(mfi);
         Array4<Real> const& lrflx = mf_lrflx->array(mfi);
@@ -201,6 +203,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             } else { // RH input was actually specific humidity in g/kg
                 Q=RH/Real(1000.0);                          //!Spec Hum (kg/kg)
             }
+            qsp_diag(i,j,0) = Q;   // diagnostic only
 
             //  Compute water saturation vapor pressure (mb), using Teten formula.
 

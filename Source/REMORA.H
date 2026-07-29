@@ -613,6 +613,12 @@ public:
      * always, filled every setup_step, written only when "rho" is requested in
      * remora.plot_vars_3d. */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_rho_diag;
+
+    /** derived specific humidity Q (kg/kg) as the bulk flux actually uses it,
+     * i.e. after the RH<2.0 fraction-vs-g/kg branch. A local scalar inside the
+     * bulk_fluxes lambda, kept only so it can be written out and differenced
+     * against ROMS's formula. Diagnostic; nothing reads it. */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_qsp_diag;
     /** \brief Brunt-Vaisala frequency (3D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_bvf;
     /** \brief Thermal expansion coefficient (3D) */

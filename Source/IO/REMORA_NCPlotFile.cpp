@@ -586,6 +586,17 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             ncf.var("Vwind").put_attr("coordinates","x_rho y_rho ocean_time");
             ncf.var("Vwind").put_attr("field","Vwind, scalar, series");
 
+            // Derived specific humidity as the bulk flux uses it (kg/kg),
+            // after the RH<2.0 branch. Diagnostic for ROMS parity work.
+            ncf.def_var("Qsp", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
+            ncf.var("Qsp").put_attr("long_name","derived specific humidity used by bulk flux");
+            ncf.var("Qsp").put_attr("units","kilogram kilogram-1");
+            ncf.var("Qsp").put_attr("time","ocean_time");
+            ncf.var("Qsp").put_attr("grid","grid");
+            ncf.var("Qsp").put_attr("location","face");
+            ncf.var("Qsp").put_attr("coordinates","x_rho y_rho ocean_time");
+            ncf.var("Qsp").put_attr("field","Qsp, scalar, series");
+
             // Surface air pressure (Pascal)
             ncf.def_var("Pair", ncutils::NCDType::Real,{ nt_name, ny_r_name, nx_r_name });
             ncf.var("Pair").put_attr("long_name","surface air pressure");
@@ -1060,6 +1071,15 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     Gpu::streamSynchronize();
                     auto nc_plot_var = ncf.var("Vwind");
                     nc_plot_var.put(tmp_vw.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
+                }
+
+                {
+                    FArrayBox tmp_q;
+                    tmp_q.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
+                    tmp_q.template copy<RunOn::Device>((*vec_qsp_diag[lev])[mfi.index()], 0, 0, 1);
+                    Gpu::streamSynchronize();
+                    auto nc_plot_var = ncf.var("Qsp");
+                    nc_plot_var.put(tmp_q.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
                 }
 
                 // Pair

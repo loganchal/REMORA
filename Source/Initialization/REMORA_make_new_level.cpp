@@ -492,6 +492,7 @@ void REMORA::resize_stuff(int lev)
     vec_rhoS.resize(lev+1);
     vec_rhoA.resize(lev+1);
     vec_rho_diag.resize(lev+1);
+    vec_qsp_diag.resize(lev+1);
     vec_bvf.resize(lev+1);
 
     vec_tke.resize(lev+1);
@@ -668,6 +669,7 @@ void REMORA::init_stuff (int lev, const BoxArray& ba, const DistributionMapping&
     vec_rhoS[lev].reset(new MultiFab(ba,dm,1,IntVect(NGROW,NGROW,0)));
     vec_rhoA[lev].reset(new MultiFab(ba,dm,1,IntVect(NGROW,NGROW,0)));
     vec_rho_diag[lev].reset(new MultiFab(ba,dm,1,IntVect(NGROW,NGROW,0)));
+    vec_qsp_diag[lev].reset(new MultiFab(ba,dm,1,IntVect(NGROW,NGROW,0)));
     vec_bvf[lev].reset(new MultiFab(convert(ba,IntVect(0,0,1)),dm,1,IntVect(NGROW,NGROW,0)));
 
     vec_tke[lev].reset(new MultiFab(convert(ba,IntVect(0,0,1)),dm,3,IntVect(NGROW,NGROW,0)));
