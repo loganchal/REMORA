@@ -84,8 +84,13 @@ REMORA::vert_visc_3d (const Box& phi_bx, const int ioff, const int joff,
             const Real oHzkm1 = one/ Hzk(i,j,k-1);
             const Real oHz = one/ Hzk(i,j,k);
 
-            FC(i,j,k) = sixth * Hzk(i,j,k-1) - dt_lev * AK(i,j,k-1) / Hzk(i,j,k-1);
-            CF(i,j,k) = sixth * Hzk(i,j,k  ) - dt_lev * AK(i,j,k+1) / Hzk(i,j,k  );
+            // Multiply by the precomputed reciprocal, do not divide. ROMS
+            // forms oHz(i,k)=1.0_r8/Hzk(i,k) once (step3d_uv.f90:679) and then
+            // writes dt(ng)*AK(i,k-1)*oHz(i,k); (a*b)*(1/c) and (a*b)/c do not
+            // round the same way. REMORA already had the reciprocals to hand --
+            // BC two lines below uses them -- and divided here anyway.
+            FC(i,j,k) = sixth * Hzk(i,j,k-1) - dt_lev * AK(i,j,k-1) * oHzkm1;
+            CF(i,j,k) = sixth * Hzk(i,j,k  ) - dt_lev * AK(i,j,k+1) * oHz;
 
             BC(i,j,k) = third * (Hzk(i,j,k-1) + Hzk(i,j,k  )) + dt_lev * AK(i,j,k) * (oHzkm1 + oHz);
             Real cff = one / (BC(i,j,k) - FC(i,j,k) * CF(i,j,k-1));
