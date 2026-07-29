@@ -100,7 +100,20 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
         int icomp_to_fill_calc = (bccomp == zeta_bc() || bccomp == ubar_bc() ||
                               bccomp == vbar_bc()) ? 0 : icomp_to_fill;
 
-        boundary_series[lev][ivar+icomp]->update_interpolated_to_time(time);
+        // Measured, not assumed: REMORA's boundary data leads ROMS's by
+        // exactly one baroclinic step. Fitting the ring residual against one
+        // step of the bry tendency gives alpha = +0.9863 at step 1 with
+        // correlation +0.9996, and the residual stays CONSTANT at one step's
+        // worth (median 6.317e-06, 6.320e-06, 6.321e-06 at steps 1, 2, 4)
+        // rather than growing -- a fixed offset, not a drift.
+        //
+        // Both codes read as if they use T_new (ROMS increments time(ng)
+        // before set_data at main3d.F:522; REMORA passes t_new[lev]), so the
+        // control flow does not explain it and reading it harder has already
+        // misled this audit twice. Exposed as a parameter so the sign and size
+        // are settled by measurement.
+        const amrex::Real bdy_time = time + solverChoice.bdy_time_shift;
+        boundary_series[lev][ivar+icomp]->update_interpolated_to_time(bdy_time);
 
         const auto& bdatxlo = boundary_series[lev][ivar+icomp]->xlo_dat_interp.const_array();
         const auto& bdatxhi = boundary_series[lev][ivar+icomp]->xhi_dat_interp.const_array();
@@ -116,7 +129,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             domain_bcs_type[bccomp+icomp].hi(0) == REMORABCType::flather ||
             domain_bcs_type[bccomp+icomp].lo(1) == REMORABCType::flather ||
             domain_bcs_type[bccomp+icomp].hi(1) == REMORABCType::flather) {
-            boundary_series[lev][BdyVars::zeta]->update_interpolated_to_time(time);
+            boundary_series[lev][BdyVars::zeta]->update_interpolated_to_time(time + solverChoice.bdy_time_shift);
         }
         const auto& bdatxlo_zeta = domain_bcs_type[bccomp+icomp].lo(0) == REMORABCType::flather ?
                                    boundary_series[lev][BdyVars::zeta]->xlo_dat_interp.const_array() : Array4<Real>();

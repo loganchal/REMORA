@@ -432,6 +432,11 @@ struct SolverChoice {
         pp.queryAdd("nc_init_record",nc_init_record);
         pp.queryAdd("init_ubar_from_file",init_ubar_from_file);
 
+        // Offset applied to the time at which open-boundary data is
+        // interpolated, in seconds. Diagnostic knob for the one-step lead
+        // measured against ROMS; 0 is the unmodified behaviour.
+        pp.queryAdd("bdy_time_shift",bdy_time_shift);
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -918,6 +923,7 @@ struct SolverChoice {
     int nc_init_record = 0;
     // Also read ubar/vbar from the init file (ROMS non-PERFECT_RESTART set)
     bool init_ubar_from_file = false;
+    amrex::Real bdy_time_shift = 0.0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
