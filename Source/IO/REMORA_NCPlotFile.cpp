@@ -1339,6 +1339,10 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
                 tmp.template copy<RunOn::Device>((*mf_sustr_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
+                // Stored kinematic (m2/s2). ROMS applies the varinfo rho0 scale
+                // on write, and the units attribute above says N/m2, so scale
+                // here -- tmp is pinned host memory at this point.
+                tmp.template mult<RunOn::Host>(solverChoice.rho0);
 
                 auto nc_plot_var = ncf.var("sustr");
                 nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
@@ -1427,6 +1431,8 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                 tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
                 tmp.template copy<RunOn::Device>((*mf_svstr_out)[mfi.index()], 0, 0, 1);
                 Gpu::streamSynchronize();
+                // See the sustr note: kinematic -> N/m2 for ROMS compatibility.
+                tmp.template mult<RunOn::Host>(solverChoice.rho0);
 
                 auto nc_plot_var = ncf.var("svstr");
                 nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
