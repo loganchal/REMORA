@@ -32,7 +32,15 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
                      const int N)
 {
     BL_PROFILE("REMORA::bulk_fluxes()");
+    // ROMS bulk_flux.f90:615 has `integer, parameter :: IterMax = 3`.
+    // Overridable at compile time for parity bisection: running 1, 2 and 3
+    // passes on both sides tests whether the residual is amplified through the
+    // iteration or is already present after the first pass.
+#ifdef REMORA_BULK_ITERMAX
+    const int IterMax = REMORA_BULK_ITERMAX;
+#else
     const int IterMax = 3;
+#endif
     const BoxArray& ba = mf_cons->boxArray();
     const DistributionMapping& dm = mf_cons->DistributionMap();
     MultiFab mf_Taux(ba, dm, 1, IntVect(NGROW,NGROW,0));
