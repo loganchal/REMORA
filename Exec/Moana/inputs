@@ -64,8 +64,12 @@ remora.theta_b     = 2.0
 remora.tcline      = 250.0
 
 # ------------------------------------------------------- advection
-# roms.in Hadvection == SU3 compiles to pure centered-4 in this build
-# (TS_U3ADV_SPLIT undefined) -- see ledger "tracer advection" audit.
+# roms.in Hadvection == SU3 resolves to Split_U3 (ROMS's own log prints
+# "temp  1  Split_U3  Centered4"), and in step3d_t.f90 / pre_step3d.f90
+# SPLIT_U3 shares the CENTERED4 flux branch verbatim. The extra upstream
+# diffusion that would accompany it needs TS_U3ADV_SPLIT, which is undefined
+# here (absent from the preprocessed spec, and t3dmix.f90 has no SPLIT_U3
+# term). So centered-4 is the complete match, not an approximation.
 remora.tracer_horizontal_advection_scheme = "centered4"
 remora.uv_horizontal_advection_scheme     = "upstream3"
 
@@ -145,9 +149,11 @@ remora.tides      = true
 remora.tide_start = 0.0              # roms.in TIDE_START (days)
 
 # ----------------------------------------------------------- rivers
-# roms.in LuvSrc=T, LtracerSrc=T T. Enabled together with nc_river_file below
-# once a river file covering the run window exists (see the note there).
-remora.do_rivers_temp  = true
+# roms.in LuvSrc=T, LtracerSrc=F T -- momentum and SALT only. The temperature
+# river source was switched off in roms.in on 2026-07-19; leaving it on here
+# injected river heat ROMS never applies. Invisible at step 0 (rivers act only
+# during stepping) and a guaranteed divergence thereafter.
+remora.do_rivers_temp  = false
 remora.do_rivers_salt  = true
 
 # ------------------------------------------- climatology nudging
