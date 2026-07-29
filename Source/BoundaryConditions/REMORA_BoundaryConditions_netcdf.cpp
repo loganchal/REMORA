@@ -182,20 +182,10 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
             Box ylo_ghost = ylo; ylo_ghost.setBig(1,ubound(ylo).y-1);
             Box yhi_ghost = yhi; yhi_ghost.setSmall(1,lbound(yhi).y+1);
 
-            // One-shot diagnostic: which rows are the condition and the
-            // outward copy actually writing, and which BC branch is taken?
-            // Three attempts at this defect were made by reasoning about the
-            // index arithmetic and all three were wrong, so print it instead.
-            if (REMORA::bc_debug_once) {
-                REMORA::bc_debug_once = false;
-                amrex::AllPrint() << "[bcdbg] mf_box y " << lbound(mf_box).y << ".." << ubound(mf_box).y
-                                  << "  dom_hi.y " << dom_hi.y
-                                  << "  yhi y " << lbound(yhi).y << ".." << ubound(yhi).y
-                                  << "  yhi_edge y " << lbound(yhi).y
-                                  << "  yhi_ghost y " << lbound(yhi).y+1 << ".." << ubound(yhi).y
-                                  << "  null_mf_calc " << null_mf_calc << std::endl;
-            }
-
+            // The box arithmetic here is settled, not guessed:
+            // NCTimeSeriesBoundary.cpp:129 builds yhi_bx as the single row
+            // y = hi[1]+1, so yhi_edge is exactly dom_hi.y+1 -- ROMS's
+            // t(i,Jend+1) -- and yhi_ghost is everything beyond it.
             const Array4<Real>& dest_arr = mf_to_fill.array(mfi);
             const Array4<const Real>& mask_arr = mf_mask.array(mfi);
             const Array4<const Real>& calc_arr = (!null_mf_calc) ? mf_calc.array(mfi) : Array4<amrex::Real>();
@@ -281,10 +271,19 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real grad_lo_imjp1 = (calc_arr(dom_lo.x+mf_index_type[0]-1,j+1,k,icomp+icomp_to_fill_calc) - calc_arr(dom_lo.x-1+mf_index_type[0],j  ,k,icomp+icomp_to_fill_calc));
                         Real grad_lo_jp1   = (calc_arr(dom_lo.x+mf_index_type[0]  ,j+1,k,icomp+icomp_to_fill_calc) - calc_arr(dom_lo.x  +mf_index_type[0],j  ,k,icomp+icomp_to_fill_calc));
                         if (cell_centered) {
-                                grad_lo_im1   *= mskv(i,j,0);
-                                grad_lo       *= mskv(i,j,0);
-                                grad_lo_imjp1 *= mskv(i,j,0);
-                                grad_lo_jp1   *= mskv(i,j,0);
+                                // ROMS masks each gradient with the vmask at
+                                // ITS OWN (i,j), not at the boundary point:
+                                // t3dbc_im.f90 west uses vmask(Istr-1,j) for
+                                // grad(Istr-1,j) and vmask(Istr,j) for
+                                // grad(Istr,j), and the j+1 pair likewise.
+                                // A single mskv(i,j) is right only for the
+                                // first of the four.
+                                const int ib = dom_lo.x-1+mf_index_type[0];
+                                const int ii = dom_lo.x  +mf_index_type[0];
+                                grad_lo_im1   *= mskv(ib,j  ,0);
+                                grad_lo       *= mskv(ii,j  ,0);
+                                grad_lo_imjp1 *= mskv(ib,j+1,0);
+                                grad_lo_jp1   *= mskv(ii,j+1,0);
                         }
                         Real dTdt = calc_arr(dom_lo.x+mf_index_type[0],j,k,icomp+icomp_to_fill_calc) - dest_arr(dom_lo.x+mf_index_type[0]  ,j,k,icomp+icomp_to_fill);
                         Real dTdx = dest_arr(dom_lo.x+mf_index_type[0],j,k,icomp+icomp_to_fill) - dest_arr(dom_lo.x+mf_index_type[0]+1,j,k,icomp+icomp_to_fill);
@@ -362,10 +361,14 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real grad_hi_jp1  = (calc_arr(dom_hi.x-mf_index_type[0]  ,j+1,k,icomp+icomp_to_fill_calc) - calc_arr(dom_hi.x-mf_index_type[0]  ,j  ,k,icomp+icomp_to_fill_calc));
                         Real grad_hi_ijp1 = (calc_arr(dom_hi.x-mf_index_type[0]+1,j+1,k,icomp+icomp_to_fill_calc) - calc_arr(dom_hi.x-mf_index_type[0]+1,j  ,k,icomp+icomp_to_fill_calc));
                         if (cell_centered) {
-                            grad_hi      *= mskv(i,j,0);
-                            grad_hi_ip1  *= mskv(i,j,0);
-                            grad_hi_jp1  *= mskv(i,j,0);
-                            grad_hi_ijp1 *= mskv(i,j,0);
+                            // See comment on xlo: each gradient takes the
+                            // vmask at its own (i,j).
+                            const int ii = dom_hi.x-mf_index_type[0];
+                            const int ib = dom_hi.x-mf_index_type[0]+1;
+                            grad_hi      *= mskv(ii,j  ,0);
+                            grad_hi_ip1  *= mskv(ib,j  ,0);
+                            grad_hi_jp1  *= mskv(ii,j+1,0);
+                            grad_hi_ijp1 *= mskv(ib,j+1,0);
                         }
                         Real dTdt = calc_arr(dom_hi.x-mf_index_type[0],j,k,icomp+icomp_to_fill_calc) - dest_arr(dom_hi.x-mf_index_type[0]  ,j,k,icomp+icomp_to_fill);
                         Real dTdx = dest_arr(dom_hi.x-mf_index_type[0],j,k,icomp+icomp_to_fill) - dest_arr(dom_hi.x-mf_index_type[0]-1,j,k,icomp+icomp_to_fill);
@@ -436,10 +439,14 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real grad_lo_ip1   = (calc_arr(i+1,dom_lo.y+mf_index_type[1]  ,k,icomp+icomp_to_fill_calc) - calc_arr(i  ,dom_lo.y+mf_index_type[1]  ,k,icomp+icomp_to_fill_calc));
                         Real grad_lo_ipjm1 = (calc_arr(i+1,dom_lo.y+mf_index_type[1]-1,k,icomp+icomp_to_fill_calc) - calc_arr(i  ,dom_lo.y+mf_index_type[1]-1,k,icomp+icomp_to_fill_calc));
                         if (cell_centered) {
-                            grad_lo       *= msku(i,j,0);
-                            grad_lo_jm1   *= msku(i,j,0);
-                            grad_lo_ip1   *= msku(i,j,0);
-                            grad_lo_ipjm1 *= msku(i,j,0);
+                            // See comment on xlo: each gradient takes the
+                            // umask at its own (i,j).
+                            const int jj = dom_lo.y+mf_index_type[1];
+                            const int jb = dom_lo.y+mf_index_type[1]-1;
+                            grad_lo       *= msku(i  ,jj,0);
+                            grad_lo_jm1   *= msku(i  ,jb,0);
+                            grad_lo_ip1   *= msku(i+1,jj,0);
+                            grad_lo_ipjm1 *= msku(i+1,jb,0);
                         }
                         Real dTdt = calc_arr(i,dom_lo.y+mf_index_type[1],k,icomp+icomp_to_fill_calc) - dest_arr(i,dom_lo.y  +mf_index_type[1],k,icomp+icomp_to_fill);
                         Real dTde = dest_arr(i,dom_lo.y+mf_index_type[1],k,icomp+icomp_to_fill) - dest_arr(i,dom_lo.y+1+mf_index_type[1],k,icomp+icomp_to_fill);
@@ -514,10 +521,14 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         Real grad_hi_ip1  = calc_arr(i+1,dom_hi.y-mf_index_type[1]  ,k,icomp+icomp_to_fill_calc) - calc_arr(i  ,dom_hi.y-mf_index_type[1]  ,k,icomp+icomp_to_fill_calc);
                         Real grad_hi_ijp1 = calc_arr(i+1,dom_hi.y-mf_index_type[1]+1,k,icomp+icomp_to_fill_calc) - calc_arr(i  ,dom_hi.y-mf_index_type[1]+1,k,icomp+icomp_to_fill_calc);
                         if (cell_centered) {
-                            grad_hi      *= msku(i,j,0);
-                            grad_hi_jp1  *= msku(i,j,0);
-                            grad_hi_ip1  *= msku(i,j,0);
-                            grad_hi_ijp1 *= msku(i,j,0);
+                            // See comment on xlo: each gradient takes the
+                            // umask at its own (i,j).
+                            const int jj = dom_hi.y-mf_index_type[1];
+                            const int jb = dom_hi.y-mf_index_type[1]+1;
+                            grad_hi      *= msku(i  ,jj,0);
+                            grad_hi_jp1  *= msku(i  ,jb,0);
+                            grad_hi_ip1  *= msku(i+1,jj,0);
+                            grad_hi_ijp1 *= msku(i+1,jb,0);
                         }
                         Real dTdt = calc_arr(i,dom_hi.y-mf_index_type[1],k,icomp+icomp_to_fill_calc) - dest_arr(i,dom_hi.y  -mf_index_type[1],k,icomp+icomp_to_fill);
                         Real dTde = dest_arr(i,dom_hi.y-mf_index_type[1],k,icomp+icomp_to_fill) - dest_arr(i,dom_hi.y-1-mf_index_type[1],k,icomp+icomp_to_fill);

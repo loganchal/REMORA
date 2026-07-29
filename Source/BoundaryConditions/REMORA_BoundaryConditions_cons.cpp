@@ -190,7 +190,16 @@ void REMORAPhysBCFunct::impose_cons_bcs (const Array4<Real>& dest_arr, const Box
         // Populate ghost cells on lo-x and hi-x domain boundaries
         ParallelFor(bx_xlo & dest_arr_box, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) {
                 int iflip = dom_lo.x - 1 - i;
-                int inner = (bc_ptr[n].lo(0) == REMORABCType::orlanski_rad) ? 1 : 0;
+                // inner=1 protects the domain-boundary row itself. For the
+                // Orlanski family that row is ROMS's t(Istr-1,...): real data
+                // read from the ini/bry files and owned by t3dbc, NOT a cell
+                // to extrapolate into. Zero-gradient-copying it here destroys
+                // the ini value before fill_from_bdyfiles ever sees it, and
+                // the radiation branch cannot recover it (with dTdt=0 the
+                // formula reduces to the identity). orlanski_rad_nudge was
+                // omitted from this list; that is defect D.
+                int inner = (bc_ptr[n].lo(0) == REMORABCType::orlanski_rad ||
+                             bc_ptr[n].lo(0) == REMORABCType::orlanski_rad_nudge) ? 1 : 0;
                 if (bc_ptr[n].lo(0) == REMORABCType::foextrap || bc_ptr[n].lo(0) == REMORABCType::clamped || bc_ptr[n].lo(0) == REMORABCType::chapman || bc_ptr[n].lo(0) == REMORABCType::orlanski_rad ||
                     bc_ptr[n].lo(0) == REMORABCType::orlanski_rad_nudge) {
                     dest_arr(i,j,k,icomp+n) =  dest_arr(dom_lo.x-n_not_fill-inner,j,k,icomp+n);
@@ -202,7 +211,9 @@ void REMORAPhysBCFunct::impose_cons_bcs (const Array4<Real>& dest_arr, const Box
             },
             bx_xhi & dest_arr_box, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) {
                 int iflip =  2*dom_hi.x + 1 - i;
-                int inner = (bc_ptr[n].hi(0) == REMORABCType::orlanski_rad) ? 1 : 0;
+                // See comment on lo-x
+                int inner = (bc_ptr[n].hi(0) == REMORABCType::orlanski_rad ||
+                             bc_ptr[n].hi(0) == REMORABCType::orlanski_rad_nudge) ? 1 : 0;
                 if (bc_ptr[n].hi(0) == REMORABCType::foextrap || bc_ptr[n].hi(0) == REMORABCType::clamped || bc_ptr[n].hi(0) == REMORABCType::chapman || bc_ptr[n].hi(0) == REMORABCType::orlanski_rad ||
                     bc_ptr[n].hi(0) == REMORABCType::orlanski_rad_nudge) {
                     dest_arr(i,j,k,icomp+n) =  dest_arr(dom_hi.x+n_not_fill+inner,j,k,icomp+n);
@@ -221,7 +232,9 @@ void REMORAPhysBCFunct::impose_cons_bcs (const Array4<Real>& dest_arr, const Box
         ParallelFor(
             bx_ylo & dest_arr_box, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) {
                 int jflip = dom_lo.y - 1 - j;
-                int inner = (bc_ptr[n].lo(1) == REMORABCType::orlanski_rad) ? 1 : 0;
+                // See comment on lo-x
+                int inner = (bc_ptr[n].lo(1) == REMORABCType::orlanski_rad ||
+                             bc_ptr[n].lo(1) == REMORABCType::orlanski_rad_nudge) ? 1 : 0;
                 if (bc_ptr[n].lo(1) == REMORABCType::foextrap || bc_ptr[n].lo(1) == REMORABCType::clamped || bc_ptr[n].lo(1) == REMORABCType::chapman || bc_ptr[n].lo(1) == REMORABCType::orlanski_rad ||
                     bc_ptr[n].lo(1) == REMORABCType::orlanski_rad_nudge) {
                     dest_arr(i,j,k,icomp+n) =  dest_arr(i,dom_lo.y-n_not_fill-inner,k,icomp+n);
@@ -233,7 +246,9 @@ void REMORAPhysBCFunct::impose_cons_bcs (const Array4<Real>& dest_arr, const Box
             },
             bx_yhi & dest_arr_box, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) {
                 int jflip =  2*dom_hi.y + 1 - j;
-                int inner = (bc_ptr[n].hi(1) == REMORABCType::orlanski_rad) ? 1 : 0;
+                // See comment on lo-x
+                int inner = (bc_ptr[n].hi(1) == REMORABCType::orlanski_rad ||
+                             bc_ptr[n].hi(1) == REMORABCType::orlanski_rad_nudge) ? 1 : 0;
                 if (bc_ptr[n].hi(1) == REMORABCType::foextrap || bc_ptr[n].hi(1) == REMORABCType::clamped || bc_ptr[n].hi(1) == REMORABCType::chapman || bc_ptr[n].hi(1) == REMORABCType::orlanski_rad ||
                     bc_ptr[n].hi(1) == REMORABCType::orlanski_rad_nudge) {
                     dest_arr(i,j,k,icomp+n) =  dest_arr(i,dom_hi.y+n_not_fill+inner,k,icomp+n);

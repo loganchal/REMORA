@@ -10,7 +10,6 @@
 
 using namespace amrex;
 
-bool REMORA::bc_debug_once = true;
 
 amrex::Real REMORA::startCPUTime        = zero;
 amrex::Real REMORA::previousCPUTimeUsed = zero;
@@ -444,9 +443,16 @@ REMORA::InitData ()
         }
 
         if (restart_chkfile == "") {
-            FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t, 0, true, false,0,0,zero,*cons_new[lev]);
-            FillPatch(lev, t_new[lev], *xvel_new[lev], xvel_new, xvel_bc(), BdyVars::u, 0, true, false,0,0,zero,*xvel_new[lev]);
-            FillPatch(lev, t_new[lev], *yvel_new[lev], yvel_new, yvel_bc(), BdyVars::v, 0, true, false,0,0,zero,*yvel_new[lev]);
+            // dt, not zero. ROMS ini_fields calls t3dbc/u3dbc/v3dbc with the
+            // real dt(ng), so the open-boundary nudging increment
+            // tau = Tobc * dt * (bry - t) is applied once at initialization.
+            // Passing zero here silently disabled it: tau collapses to 0 and
+            // the whole Orlanski branch reduces to the identity, so REMORA's
+            // t=0 boundary row was the un-nudged value while ROMS's was not.
+            const Real dt_init = (fixed_dt > zero) ? fixed_dt : dt[lev];
+            FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t, 0, true, false,0,0,dt_init,*cons_new[lev]);
+            FillPatch(lev, t_new[lev], *xvel_new[lev], xvel_new, xvel_bc(), BdyVars::u, 0, true, false,0,0,dt_init,*xvel_new[lev]);
+            FillPatch(lev, t_new[lev], *yvel_new[lev], yvel_new, yvel_bc(), BdyVars::v, 0, true, false,0,0,dt_init,*yvel_new[lev]);
             FillPatch(lev, t_new[lev], *zvel_new[lev], zvel_new, zvel_bc(), BdyVars::null, 0, true, false);
 
             // Copy from new into old just in case when initializing from scratch
