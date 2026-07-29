@@ -198,7 +198,17 @@ REMORA::mask_land_in_initial_state (int lev)
         for (MFIter mfi(mf, TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             // Ghost cells too: the stencils reach into them, and a land value
             // sitting in a halo is just as wrong as one in the valid box.
-            Box bx = mfi.growntilebox() & mask[mfi].box();
+            //
+            // Clip to the mask's horizontal footprint ONLY. The masks are 2D
+            // (a slab at k=0), so intersecting a 3D box with the mask box
+            // outright would collapse the vertical range to a single level and
+            // silently leave every other level contaminated.
+            Box bx = mfi.growntilebox();
+            const Box& mbx = mask[mfi].box();
+            Box lim(IntVect(mbx.smallEnd(0), mbx.smallEnd(1), bx.smallEnd(2)),
+                    IntVect(mbx.bigEnd(0),   mbx.bigEnd(1),   bx.bigEnd(2)),
+                    bx.ixType());
+            bx &= lim;
             const Array4<Real>       arr = mf.array(mfi);
             const Array4<Real const> msk = mask.const_array(mfi);
             const int ncomp = mf.nComp();
