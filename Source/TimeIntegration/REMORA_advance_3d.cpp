@@ -430,7 +430,7 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
     // so BOUNDARY%t_west etc. in t3dbc are at the time being stepped TO. Same
     // defect already fixed for zeta/ubar/vbar (advance_2d), u/v (below) and the
     // tides (Advance); the tracer fills were missed.
-    FillPatch(lev, t_new[lev], mf_cons, cons_new, BCVars::cons_bc, BdyVars::t,0,true,false,0,0,dt_lev,*cons_old[lev]);
+    FillPatch(lev, t_old[lev], mf_cons, cons_new, BCVars::cons_bc, BdyVars::t,0,true,false,0,0,dt_lev,*cons_old[lev]);
 
     for ( MFIter mfi(mf_cons, TilingIfNotGPU()); mfi.isValid(); ++mfi )
     {
@@ -467,7 +467,7 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
                     AK,mf_Akt->array(mfi,i_comp),BC,DC,FC,CF,nnew,N,dt_lev);
         }
     } // MFiter
-    FillPatch(lev, t_new[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t,0,true,false,0,0,dt_lev,*cons_old[lev]);
+    FillPatch(lev, t_old[lev], *cons_new[lev], cons_new, BCVars::cons_bc, BdyVars::t,0,true,false,0,0,dt_lev,*cons_old[lev]);
 
 #ifdef REMORA_USE_NETCDF
     if (solverChoice.do_temp_clim_nudg) {
