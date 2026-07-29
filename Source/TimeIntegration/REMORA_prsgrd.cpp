@@ -171,16 +171,10 @@ REMORA::prsgrd (const Box& phi_bx, const Box& phi_gbx,
         {
             Real rho_diff   = rho(i,j,k)-rho(i-1,j,k)- OneTwelfth* (dRx(i,j,k)+dRx(i-1,j,k));
             Real z_r_diff   = z_r(i,j,k)-z_r(i-1,j,k)- OneTwelfth* (dZx(i,j,k)+dZx(i-1,j,k));
-            // Grouping follows ROMS exactly. prsgrd.f90:763 writes
-            //   ru = on_u(i,j)*0.5_r8*(Hz(i,j,k)+Hz(i-1,j,k))*( ... )
-            // which Fortran evaluates left to right as ((on_u*0.5)*Hz_sum).
-            // Precomputing Hz_avg = 0.5*Hz_sum and then multiplying by on_u
-            // regroups it as on_u*(0.5*Hz_sum); floating-point multiplication
-            // is not associative, so the two do not round the same.
-            const Real Hz_sum_u = Hz(i,j,k)+Hz(i-1,j,k);
+            Real   Hz_avg   = Real(0.5) * (Hz(i,j,k)+Hz(i-1,j,k));
 
             Real on_u = two / (pn(i-1,j,0)+pn(i,j,0));
-            ru(i,j,k,nrhs) = on_u * Real(0.5) * Hz_sum_u * (
+            ru(i,j,k,nrhs) = on_u * Hz_avg * (
                             P(i-1,j,k) - P(i,j,k) - HalfGRho *
                             ( (rho(i,j,k)+rho(i-1,j,k))*(z_r(i,j,k)-z_r(i-1,j,k))-
                               OneFifth * ( (dRx(i,j,k)-dRx(i-1,j,k)) * z_r_diff -
@@ -224,11 +218,10 @@ REMORA::prsgrd (const Box& phi_bx, const Box& phi_gbx,
         {
             Real rho_diff   = rho(i,j,k)-rho(i,j-1,k)- OneTwelfth* (dRx(i,j,k)+dRx(i,j-1,k));
             Real z_r_diff   = z_r(i,j,k)-z_r(i,j-1,k)- OneTwelfth* (dZx(i,j,k)+dZx(i,j-1,k));
-            // See the note on ru: ((om_v*0.5)*Hz_sum), not om_v*(0.5*Hz_sum).
-            const Real Hz_sum_v = Hz(i,j,k)+Hz(i,j-1,k);
+            Real   Hz_avg   = Real(0.5) * (Hz(i,j,k)+Hz(i,j-1,k));
 
             Real om_v = two / (pm(i,j-1,0)+pm(i,j,0));
-            rv(i,j,k,nrhs) = om_v * Real(0.5) * Hz_sum_v * (
+            rv(i,j,k,nrhs) = om_v * Hz_avg * (
                             P(i,j-1,k) - P(i,j,k) - HalfGRho *
                             ( (rho(i,j,k)+rho(i,j-1,k))*(z_r(i,j,k)-z_r(i,j-1,k))-
                               OneFifth * ( (dRx(i,j,k)-dRx(i,j-1,k)) * z_r_diff -
