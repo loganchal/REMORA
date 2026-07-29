@@ -195,16 +195,12 @@ remora.clim_v_time_varname    = clim_time
 remora.clim_temp_time_varname = clim_time
 remora.clim_salt_time_varname = clim_time
 
-# NOTE ON RIVERS: neither available river file covers 2021-01 --
-# EVENT_9798_RYF2013_FULL/.../nz5km_N50_rivers.nc spans 2013-05..2014-06, and
-# Extension_Run/inputs/nz5km_N50_rivers.nc is a day-of-year climatology that
-# relies on ROMS cyclic-time handling, which REMORA does not implement. Rivers
-# are therefore OFF for this smoke run; a Moana-faithful production run needs
-# either a rivers file spanning the window or cyclic-time support in
-# NCTimeSeriesRiver. (Rivers are not a leading term for the ML budget, but the
-# configuration is not complete without them.)
-remora.do_rivers = false
-#remora.nc_river_file = "nz5km_N50_rivers.nc"
+# Rivers: the Moana file is a 12-record monthly climatology carrying ROMS's
+# cycle_length=365.25. REMORA has no cyclic-time handling, so the climatology
+# is tiled into an explicit multi-year series covering the run window by
+# data_tools/extend_river_climatology.py.
+remora.do_rivers     = true
+remora.nc_river_file = "nz5km_N50_rivers_ext.nc"
 
 # ----------------------------------------------------------- output
 # ROMS-schema NetCDF so the existing atlas pipeline reads it unchanged.
