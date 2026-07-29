@@ -298,9 +298,18 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
 #endif
     }
 
-    // WE BELIEVE THESE VALUES SHOULD ALREADY BE FILLED
-    // mf_Huon->FillBoundary(geom[lev].periodicity());
-    // mf_Hvom->FillBoundary(geom[lev].periodicity());
+    // These were commented out under "WE BELIEVE THESE VALUES SHOULD ALREADY
+    // BE FILLED" -- an assumption, never checked. update_massflux_3d writes
+    // Huon/Hvom over a grown box per MFIter, so with several boxes each one
+    // fills its own ghost region from its own data rather than from the
+    // neighbour's authoritative values. Single-box runs cannot show the
+    // difference, which is why it survived.
+    //
+    // Measured: with the u/v halo refresh in, 1 box vs 4 boxes is exact
+    // through step 3 and diverges at step 4, seeded at the box splits (43 of
+    // 93 differing u columns lie within one cell of i=198 or j=233).
+    mf_Huon->FillBoundary(geom[lev].periodicity());
+    mf_Hvom->FillBoundary(geom[lev].periodicity());
 
     // ************************************************************************
     // This should fill both temp and salt with temp/salt currently in cons_old
