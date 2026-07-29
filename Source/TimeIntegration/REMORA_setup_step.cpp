@@ -198,6 +198,12 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         rho_eos(gbx2,state_old,rho,pden,rhoA,rhoS,bvf,alpha,beta,Hz,z_w,z_r,h,mskr,N);
     }
 
+    // Keep a copy of the density for the history writer. mf_rho is local to
+    // this function, and ROMS-vs-REMORA parity work needs to compare rho
+    // directly rather than infer it from the fields it drives. Pure diagnostic:
+    // nothing downstream reads vec_rho_diag.
+    MultiFab::Copy(*vec_rho_diag[lev], mf_rho, 0, 0, 1, IntVect(NGROW-1,NGROW-1,0));
+
     const Real Cdb_min = solverChoice.Cdb_min;
     const Real Cdb_max = solverChoice.Cdb_max;
 

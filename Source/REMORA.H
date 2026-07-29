@@ -605,6 +605,14 @@ public:
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_rhoS;
     /** \brief vertically-averaged density */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_rhoA;
+
+    /** in-situ density anomaly, kept only so it can be written to the history
+     * file. setup_step computes rho into a local MultiFab that dies with the
+     * call; parity work against ROMS needs to compare the density field
+     * directly, which is impossible without a persistent copy. Allocated
+     * always, filled every setup_step, written only when "rho" is requested in
+     * remora.plot_vars_3d. */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_rho_diag;
     /** \brief Brunt-Vaisala frequency (3D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_bvf;
     /** \brief Thermal expansion coefficient (3D) */

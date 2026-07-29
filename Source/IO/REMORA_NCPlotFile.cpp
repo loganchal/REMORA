@@ -400,6 +400,20 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
         {
             int comp = -1;
             for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == "rho") comp = i;
+            }
+            if (comp >= 0) {
+                ncf.def_var_fill("rho", ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
+                ncf.var("rho").put_attr("long_name","density anomaly");
+                ncf.var("rho").put_attr("units","kilogram meter-3");
+                ncf.var("rho").put_attr("time","ocean_time");
+                ncf.var("rho").put_attr("grid","grid");
+                ncf.var("rho").put_attr("location","face");
+                ncf.var("rho").put_attr("coordinates","x_rho y_rho s_rho ocean_time");
+                ncf.var("rho").put_attr("field","density, scalar, series");
+            }
+            comp = -1;
+            for (int i = 0; i < names_3d.size(); i++) {
                 if (names_3d[i] == "temp") comp = i;
             }
             if (comp >= 0) {
@@ -1170,6 +1184,23 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                             local_nz, local_ny, local_nx });
                 }
             }
+
+            { // Density (diagnostic, for ROMS parity comparison)
+                int comp = -1;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == "rho") comp = i;
+                }
+                if (comp >= 0) {
+                    FArrayBox tmp;
+                    tmp.resize(tmp_bx, 1, amrex::The_Pinned_Arena());
+                    tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
+                    Gpu::streamSynchronize();
+
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
+                    nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
+                            local_nz, local_ny, local_nx });
+                }
+            } // end rho
 
             { // Temp
                 int comp = -1;

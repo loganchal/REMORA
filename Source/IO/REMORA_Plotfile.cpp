@@ -374,6 +374,13 @@ REMORA::WritePlotFile (int istep_for_plot)
             }
             mf_comp++;
         };
+        // in-situ density anomaly, straight copy (already cell-centred on the
+        // rho grid, same layout as temp). Diagnostic for ROMS parity work.
+        if (containerHasElement(plot_var_names_3d, "rho")) {
+            MultiFab::Copy(plotMF[lev], *vec_rho_diag[lev], 0, mf_comp, 1, 0);
+            mf_comp += 1;
+        }
+
         copy_ak_to_cc("Akv", *vec_Akv[lev], 0);
         copy_ak_to_cc("Akt", *vec_Akt[lev], Temp_comp);
         copy_ak_to_cc("Aks", *vec_Akt[lev], Salt_comp);
