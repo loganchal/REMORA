@@ -571,7 +571,16 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
             // Surface net salt flux (kinematic)
             ncf.def_var("ssflux", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
-            ncf.var("ssflux").put_attr("long_name","kinematic surface net salt flux, SALT*(E-P)/rhow");
+            // The stored array is (E-P)/rhow WITHOUT the salinity factor --
+            // see REMORA_bulk_flux.cpp, which matches ROMS's internal
+            // stflux(:,:,isalt) convention (ROMS multiplies by salinity where
+            // it applies the flux, not where it stores it). The old label
+            // claimed the salinity factor was already in, so anything reading
+            // this as a ROMS his-file `ssflux` was low by a factor of S:
+            // measured ROMS/REMORA = 35.0157 against a surface salinity of
+            // 34.9862. Multiply by surface salinity to get ROMS's written
+            // ssflux.
+            ncf.var("ssflux").put_attr("long_name","kinematic surface freshwater flux, (E-P)/rhow (multiply by salinity for the ROMS his-file salt flux)");
             ncf.var("ssflux").put_attr("units","meter second-1");
             ncf.var("ssflux").put_attr("time","ocean_time");
             ncf.var("ssflux").put_attr("grid","grid");
@@ -1023,8 +1032,17 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
 
                     Gpu::streamSynchronize();
 
-                    // Convert °C·m/s → W/m²
-                    tmp.mult<RunOn::Device>(Hscale);
+                    // Convert °C·m/s → W/m².
+                    //
+                    // Host, not Device. `tmp` is pinned host memory and the
+                    // `put` below reads it from the host immediately, with no
+                    // sync in between -- so a device-side multiply is a race
+                    // against the NetCDF write. It loses often: qnet came out
+                    // with 62154 of 111672 wet interior points holding
+                    // uninitialised values (~1e230) rather than a heat flux.
+                    // Every other variable in this function syncs immediately
+                    // before its put; these four scaled ones did not.
+                    tmp.mult<RunOn::Host>(Hscale);
 
                     auto nc_var = ncf.var("qnet");
                     nc_var.put(tmp.dataPtr(),
@@ -1059,7 +1077,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     Gpu::streamSynchronize();
 
                     // Convert °C·m/s → W/m²
-                    tmp.mult<RunOn::Device>(Hscale);
+                    tmp.mult<RunOn::Host>(Hscale);
 
                     auto nc_var = ncf.var("latent");
                     nc_var.put(tmp.dataPtr(),
@@ -1074,7 +1092,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     Gpu::streamSynchronize();
 
                     // Convert °C·m/s → W/m²
-                    tmp.mult<RunOn::Device>(Hscale);
+                    tmp.mult<RunOn::Host>(Hscale);
 
                     auto nc_var = ncf.var("sensible");
                     nc_var.put(tmp.dataPtr(),
@@ -1089,7 +1107,7 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     Gpu::streamSynchronize();
 
                     // Convert °C·m/s → W/m²
-                    tmp.mult<RunOn::Device>(Hscale);
+                    tmp.mult<RunOn::Host>(Hscale);
 
                     auto nc_var = ncf.var("lwrad");
                     nc_var.put(tmp.dataPtr(),
