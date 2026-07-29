@@ -98,7 +98,13 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             Real cloud = cloud_arr(i,j,0);  // Cloud cover fraction [0-1]
 
             // Input bulk parametrization fields
-            Real wind_mag = std::sqrt(uwind(i,j,0)*uwind(i,j,0) + vwind(i,j,0) * vwind(i,j,0)) + eps;
+            // No epsilon here. ROMS bulk_flux.f90:777 is a bare
+            //   Wmag = SQRT(Uair*Uair + Vair*Vair)
+            // and Wmag feeds Wspeed, hence Cd and the stress, so an added
+            // eps biases every stress point. It is only 1e-20 and cannot
+            // explain the measured 2.9e-4 stress error, but bit-identity
+            // admits no extra terms.
+            Real wind_mag = std::sqrt(uwind(i,j,0)*uwind(i,j,0) + vwind(i,j,0) * vwind(i,j,0));
             Real TseaK = cons(i,j,N,Temp_comp) + Real(273.16);
 
             // Initialize
@@ -256,8 +262,9 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             Real CC=vonKar*Ct/Cd;
 
             Real Ribcu = -blk_ZW/(blk_Zabl*Real(0.004)*blk_beta*blk_beta*blk_beta);
+            // ROMS bulk_flux.f90 divides by (TairK*delW*delW) with no eps.
             Real Ri = -g*blk_ZW*((delT-delTc)+Real(0.61)*TairK*delQ)/
-                                 (TairK*delW*delW+eps);
+                                 (TairK*delW*delW);
             Real Zetu;
             if (Ri < zero) {
                 Zetu=CC*Ri/(one+Ri/Ribcu);       // Unstable
@@ -353,8 +360,14 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             // Compute wind stress components (N/m2), Tau.
             cff=rhoAir*Cd*Wspeed;
             // amrex::Print() << "rhoAir: " << rhoAir << " Cd: " << Cd << " Wspeed: " << Wspeed << " cff: " << cff << "\n";
-            Real sign_u = (uwind(i,j,0) >= zero) ? 1 : -1;
-            Real sign_v = (vwind(i,j,0) >= zero) ? 1 : -1;
+            // Fortran SIGN(1.0, x) returns -1 for negative zero; the C++
+            // ternary (x >= 0) returns +1. std::copysign reproduces the
+            // Fortran semantics exactly, including the -0.0 case. Only bites
+            // where the wind component is exactly -0.0 and it is raining
+            // (the term multiplies Taur = 0.85*rain*Wmag), so this is not the
+            // dominant defect -- but it is a real divergence.
+            Real sign_u = std::copysign(Real(1.0), uwind(i,j,0));
+            Real sign_v = std::copysign(Real(1.0), vwind(i,j,0));
             Taux(i,j,0)=(cff*uwind(i,j,0)+Taur*sign_u) * mskr(i,j,0);
             Tauy(i,j,0)=(cff*vwind(i,j,0)+Taur*sign_v) * mskr(i,j,0);
             // amrex::Print() << "Taux: " << Taux(i,j,0) << " Tauy: " << Tauy(i,j,0) << "\n";
