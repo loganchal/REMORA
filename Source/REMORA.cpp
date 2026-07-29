@@ -1602,6 +1602,10 @@ REMORA::init_only (int lev, Real time)
                 amrex::Print() << "Calling init_data_from_netcdf " << std::endl;
                 init_data_from_netcdf(lev);
                 set_zeta_to_Ztavg(lev);
+                // ROMS scrubs land points on read (nf_fread2d under MASKING).
+                // Real ini files rely on it -- Moana's carries live velocities
+                // on land -- and the advection stencils assume zero there.
+                mask_land_in_initial_state(lev);
                 amrex::Print() << "Initial data loaded from netcdf file \n " << std::endl;
 #endif
             } else {

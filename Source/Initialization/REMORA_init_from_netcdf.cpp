@@ -161,6 +161,62 @@ REMORA::init_data_from_netcdf (int lev)
     }
 }
 
+/**
+ * Zero every land point of the initial state.
+ *
+ * ROMS does this on read, for every field, in nf_fread2d/3d under MASKING:
+ *
+ *     IF (Amask(i,j).gt.0.0_r8) THEN
+ *       A(i,j)=wrk(ic)
+ *     ELSE
+ *       A(i,j)=0.0_r8
+ *     END IF
+ *
+ * so what ROMS integrates is never what the file literally contains. Real
+ * initial files rely on that. The Moana 2021-01-01 ini carries leftover
+ * velocities on land -- 38600 land points in u up to 0.199 m/s, 32600 in v up
+ * to 0.365 m/s -- and the netCDF default fill (9.969e+36) in ubar/vbar.
+ *
+ * It matters because neither code masks its advection stencils: both rely on
+ * the velocity being exactly zero at land, so the fourth-order barotropic and
+ * third-order upstream operators quietly pick the garbage up through their
+ * i-1..i+2 footprints. Without this call the port disagrees with ROMS by
+ * ~2e-05 in ubar at every land-adjacent face, propagating to the whole domain
+ * within an hour via external gravity waves; with it, the same comparison sits
+ * at 1.8e-09, which is float32 output quantisation.
+ *
+ * @param[in] lev  level to operate on
+ */
+void
+REMORA::mask_land_in_initial_state (int lev)
+{
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(vec_mskr[lev] && vec_msku[lev] && vec_mskv[lev],
+        "masks must be initialised before the initial state is masked");
+
+    auto zero_where_land = [&] (MultiFab& mf, const MultiFab& mask)
+    {
+        for (MFIter mfi(mf, TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+            // Ghost cells too: the stencils reach into them, and a land value
+            // sitting in a halo is just as wrong as one in the valid box.
+            Box bx = mfi.growntilebox() & mask[mfi].box();
+            const Array4<Real>       arr = mf.array(mfi);
+            const Array4<Real const> msk = mask.const_array(mfi);
+            const int ncomp = mf.nComp();
+            ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n)
+            {
+                if (msk(i,j,0) < Real(0.5)) { arr(i,j,k,n) = Real(0.0); }
+            });
+        }
+    };
+
+    zero_where_land(*cons_new[lev], *vec_mskr[lev]);
+    zero_where_land(*xvel_new[lev], *vec_msku[lev]);
+    zero_where_land(*yvel_new[lev], *vec_mskv[lev]);
+    zero_where_land(*vec_zeta[lev], *vec_mskr[lev]);
+    zero_where_land(*vec_ubar[lev], *vec_msku[lev]);
+    zero_where_land(*vec_vbar[lev], *vec_mskv[lev]);
+}
+
 void
 REMORA::init_data_full_domain_from_netcdf ()
 {

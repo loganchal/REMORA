@@ -1253,6 +1253,9 @@ public:
     void set_init_data_averaged_down (int lev);
     /** \brief Problem initialization from NetCDF file */
     void init_data_from_netcdf (int lev);
+
+    /** Zero every land point of the initial state, as ROMS does on read. */
+    void mask_land_in_initial_state (int lev);
     /** \brief High resolution roblem initialization from NetCDF file */
     void init_data_full_domain_from_netcdf ();
     /** \brief Boundary data initialization from NetCDF file */
