@@ -269,11 +269,23 @@ REMORA::WritePlotFile (int istep_for_plot)
             icomp_u++;
         }
         if (plot_name == "sustr" ) {
-            for (int lev = 0; lev <= finest_level; ++lev) { MultiFab::Copy(mf_2d_u[lev],*vec_sustr[lev],0,icomp_u,1,0); }
+            // Stored kinematic (m2/s2); ROMS writes stress in N/m2 via the
+            // varinfo rho0 scale factor, and our units attribute says the
+            // same, so scale on write to match ROMS tooling.
+            for (int lev = 0; lev <= finest_level; ++lev) {
+                MultiFab::Copy(mf_2d_u[lev],*vec_sustr[lev],0,icomp_u,1,0);
+                mf_2d_u[lev].mult(solverChoice.rho0, icomp_u, 1, 0);
+            }
             icomp_u++;
         }
         if (plot_name == "bustr" ) {
-            for (int lev = 0; lev <= finest_level; ++lev) { MultiFab::Copy(mf_2d_u[lev],*vec_bustr[lev],0,icomp_u,1,0); }
+            // Stored kinematic (m2/s2); ROMS writes stress in N/m2 via the
+            // varinfo rho0 scale factor, and our units attribute says the
+            // same, so scale on write to match ROMS tooling.
+            for (int lev = 0; lev <= finest_level; ++lev) {
+                MultiFab::Copy(mf_2d_u[lev],*vec_bustr[lev],0,icomp_u,1,0);
+                mf_2d_u[lev].mult(solverChoice.rho0, icomp_u, 1, 0);
+            }
             icomp_u++;
         }
     }
@@ -286,11 +298,19 @@ REMORA::WritePlotFile (int istep_for_plot)
             icomp_v++;
         }
         if (plot_name == "svstr" ) {
-            for (int lev = 0; lev <= finest_level; ++lev) { MultiFab::Copy(mf_2d_v[lev],*vec_svstr[lev],0,icomp_v,1,0); }
+            // See the sustr note: kinematic -> N/m2 for ROMS compatibility.
+            for (int lev = 0; lev <= finest_level; ++lev) {
+                MultiFab::Copy(mf_2d_v[lev],*vec_svstr[lev],0,icomp_v,1,0);
+                mf_2d_v[lev].mult(solverChoice.rho0, icomp_v, 1, 0);
+            }
             icomp_v++;
         }
         if (plot_name == "bvstr" ) {
-            for (int lev = 0; lev <= finest_level; ++lev) { MultiFab::Copy(mf_2d_v[lev],*vec_bvstr[lev],0,icomp_v,1,0); }
+            // See the sustr note: kinematic -> N/m2 for ROMS compatibility.
+            for (int lev = 0; lev <= finest_level; ++lev) {
+                MultiFab::Copy(mf_2d_v[lev],*vec_bvstr[lev],0,icomp_v,1,0);
+                mf_2d_v[lev].mult(solverChoice.rho0, icomp_v, 1, 0);
+            }
             icomp_v++;
         }
     }
