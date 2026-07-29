@@ -133,8 +133,41 @@ REMORA::set_2darrays (int lev)
         });
     }
 
-    FillPatch(lev, t_new[lev], *vec_ubar[lev], GetVecOfPtrs(vec_ubar), ubar_bc(), BdyVars::ubar,0,false,false,0,0,zero,*vec_ubar[lev]);
-    FillPatch(lev, t_new[lev], *vec_vbar[lev], GetVecOfPtrs(vec_vbar), vbar_bc(), BdyVars::vbar,0,false,false,0,0,zero,*vec_vbar[lev]);
+    // ROMS does NOT apply the barotropic boundary condition at initialisation
+    // when it is Flather or radiation. ini_fields.f90:775 guards the
+    // u2dbc/v2dbc calls with
+    //   IF (.not.(ANY(LBC(:,isUbar)%radiation) .or. ANY(LBC(:,isVbar)%radiation)
+    //        .or. ANY(LBC(:,isUbar)%Flather)   .or. ANY(LBC(:,isVbar)%Flather)))
+    // and Moana sets LBC(isUbar) = Fla, so the guard is false and ubar/vbar
+    // keep exactly the values read from the ini file. Measured: ROMS leaves
+    // 1722 of 1722 boundary-ring ubar points bit-identical to the ini.
+    // Applying the condition here moved 934 of them by up to 0.164 m/s, which
+    // then drove the whole barotropic solution. Halos still need filling, so
+    // this is FillPatchNoBC rather than skipping the call: ROMS does its
+    // exchanges here too, just not the boundary condition.
+    auto bc_skips_init = [this] (int bccomp)
+    {
+        for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
+            for (int lohi = 0; lohi < 2; lohi++) {
+                const int t = lohi == 0 ? domain_bcs_type[bccomp].lo(dir)
+                                        : domain_bcs_type[bccomp].hi(dir);
+                if (t == REMORABCType::flather ||
+                    t == REMORABCType::orlanski_rad ||
+                    t == REMORABCType::orlanski_rad_nudge) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    if (bc_skips_init(ubar_bc()) || bc_skips_init(vbar_bc())) {
+        FillPatchNoBC(lev, t_new[lev], *vec_ubar[lev], GetVecOfPtrs(vec_ubar), BdyVars::ubar,0,false,false);
+        FillPatchNoBC(lev, t_new[lev], *vec_vbar[lev], GetVecOfPtrs(vec_vbar), BdyVars::vbar,0,false,false);
+    } else {
+        FillPatch(lev, t_new[lev], *vec_ubar[lev], GetVecOfPtrs(vec_ubar), ubar_bc(), BdyVars::ubar,0,false,false,0,0,zero,*vec_ubar[lev]);
+        FillPatch(lev, t_new[lev], *vec_vbar[lev], GetVecOfPtrs(vec_vbar), vbar_bc(), BdyVars::vbar,0,false,false,0,0,zero,*vec_vbar[lev]);
+    }
 }
 
 /**
