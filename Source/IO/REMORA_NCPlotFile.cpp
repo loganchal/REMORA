@@ -608,6 +608,15 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             ncf.var("Wstar").put_attr("coordinates","x_rho y_rho ocean_time");
             ncf.var("Wstar").put_attr("field","Wstar, scalar, series");
 
+            ncf.def_var("Wgus", ncutils::NCDType::Real, {nt_name, ny_r_name, nx_r_name });
+            ncf.var("Wgus").put_attr("long_name","bulk flux gustiness");
+            ncf.var("Wgus").put_attr("units","meter second-1");
+            ncf.var("Wgus").put_attr("time","ocean_time");
+            ncf.var("Wgus").put_attr("grid","grid");
+            ncf.var("Wgus").put_attr("location","face");
+            ncf.var("Wgus").put_attr("coordinates","x_rho y_rho ocean_time");
+            ncf.var("Wgus").put_attr("field","Wgus, scalar, series");
+
             // Surface air pressure (Pascal)
             ncf.def_var("Pair", ncutils::NCDType::Real,{ nt_name, ny_r_name, nx_r_name });
             ncf.var("Pair").put_attr("long_name","surface air pressure");
@@ -1100,6 +1109,15 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                     Gpu::streamSynchronize();
                     auto nc_plot_var = ncf.var("Wstar");
                     nc_plot_var.put(tmp_w.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
+                }
+
+                {
+                    FArrayBox tmp_wg;
+                    tmp_wg.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
+                    tmp_wg.template copy<RunOn::Device>((*vec_wgus_diag[lev])[mfi.index()], 0, 0, 1);
+                    Gpu::streamSynchronize();
+                    auto nc_plot_var = ncf.var("Wgus");
+                    nc_plot_var.put(tmp_wg.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
                 }
 
                 // Pair

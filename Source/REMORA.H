@@ -625,6 +625,11 @@ public:
      * after one pass, so this is the quantity to difference against ROMS.
      * Diagnostic; nothing reads it. */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_wstar_diag;
+
+    /** gustiness Wgus (m/s) after the COARE iteration. Set by a sign branch on
+     * Bf, so points near Bf=0 can take different branches in the two codes --
+     * the suspected source of the residual stress difference. Diagnostic. */
+    amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_wgus_diag;
     /** \brief Brunt-Vaisala frequency (3D) */
     amrex::Vector<std::unique_ptr<amrex::MultiFab>> vec_bvf;
     /** \brief Thermal expansion coefficient (3D) */

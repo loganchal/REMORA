@@ -63,6 +63,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
         // diagnostic: the derived specific humidity, for ROMS comparison
         Array4<Real> const& qsp_diag = vec_qsp_diag[lev]->array(mfi);
         Array4<Real> const& wstar_diag = vec_wstar_diag[lev]->array(mfi);
+        Array4<Real> const& wgus_diag  = vec_wgus_diag[lev]->array(mfi);
         Array4<Real> const& svstr = mf_svstr->array(mfi);
         Array4<Real> const& stflux = mf_stflux->array(mfi);
         Array4<Real> const& lrflx = mf_lrflx->array(mfi);
@@ -345,6 +346,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             // first guess here instead compared two different
             // quantities and showed a spurious 18% difference.
             wstar_diag(i,j,0) = Wstar;
+            wgus_diag(i,j,0)  = Wgus;
 
             // Compute transfer coefficients for momentum (Cd).
             Real Wspeed=std::sqrt(wind_mag*wind_mag+Wgus*Wgus);
