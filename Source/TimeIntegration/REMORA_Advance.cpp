@@ -18,12 +18,15 @@ REMORA::Advance (int lev, Real time, Real dt_lev, int /*iteration*/, int /*ncycl
 {
     BL_PROFILE("REMORA::Advance()");
 
-    // ROMS main3d.F calls set_tides once per baroclinic step (after set_data has
-    // interpolated the open-boundary data to time(ng), before step2d). Evaluating it
-    // here, with the same `time` that the boundary data is interpolated to
-    // (t_old[lev]), reproduces that: the tidal signal is frozen across the barotropic
-    // sub-steps, exactly as the ROMS BOUNDARY arrays are.
-    set_tides(lev, time);
+    // ROMS main3d.F calls set_tides once per baroclinic step, after set_data has
+    // interpolated the open-boundary data, and both happen AFTER the clock has
+    // advanced (time(ng)=time(ng)+dt at main3d.F:522). So the tidal phase a step
+    // integrates with is the one at the time it is stepping TO, not from.
+    //
+    // Passing `time` here (which is t_old) lags the tide by exactly one dt. That
+    // is the same defect already fixed in the surface forcing reader, in a second
+    // path: tides drive the free surface, so it shows up most strongly in zeta.
+    set_tides(lev, t_new[lev]);
 
     setup_step(lev, time, dt_lev);
 

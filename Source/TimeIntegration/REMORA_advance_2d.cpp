@@ -812,11 +812,15 @@ REMORA::advance_2d (int lev,
         MultiFab ubar_know(*vec_ubar[lev], make_alias, know, 1);
         MultiFab vbar_know(*vec_vbar[lev], make_alias, know, 1);
         MultiFab zeta_know(*vec_zeta[lev], make_alias, know, 1);
-        FillPatch(lev, t_old[lev], *vec_ubar[lev], GetVecOfPtrs(vec_ubar), ubar_bc(), BdyVars::ubar,
+        // t_new, not t_old: these FillPatch calls read the open-boundary data
+        // files, and ROMS interpolates that data after its clock advances (see
+        // the note in Advance() on set_tides). Using t_old lags the entire
+        // barotropic boundary forcing by one dt, which lands hardest on zeta.
+        FillPatch(lev, t_new[lev], *vec_ubar[lev], GetVecOfPtrs(vec_ubar), ubar_bc(), BdyVars::ubar,
                   knew, false,true, 0,know, dt2d, ubar_know);
-        FillPatch(lev, t_old[lev], *vec_vbar[lev], GetVecOfPtrs(vec_vbar), vbar_bc(), BdyVars::vbar,
+        FillPatch(lev, t_new[lev], *vec_vbar[lev], GetVecOfPtrs(vec_vbar), vbar_bc(), BdyVars::vbar,
                   knew, false,true, 0,know, dt2d, vbar_know);
-        FillPatch(lev, t_old[lev], *vec_zeta[lev], GetVecOfPtrs(vec_zeta), zeta_bc(), BdyVars::zeta,
+        FillPatch(lev, t_new[lev], *vec_zeta[lev], GetVecOfPtrs(vec_zeta), zeta_bc(), BdyVars::zeta,
                   knew, false,false, 0,know, dt2d, zeta_know);
 
 #ifdef REMORA_USE_NETCDF

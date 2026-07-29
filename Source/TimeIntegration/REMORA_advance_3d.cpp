@@ -185,12 +185,15 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         // Fill the data which is stored in the boundary data read from netcdf files
         if (solverChoice.boundary_from_netcdf)
         {
-            fill_from_bdyfiles(lev, mf_u,*mf_msku,t_old[lev],xvel_bc(),BdyVars::u,0,0,*xvel_old[lev],dt_lev);
-            fill_from_bdyfiles(lev, mf_v,*mf_mskv,t_old[lev],yvel_bc(),BdyVars::v,0,0,*yvel_old[lev],dt_lev);
+            // t_new, not t_old: ROMS's set_data runs after the clock advances,
+            // so boundary data is the snapshot at the time being stepped to.
+            // See the note in Advance() on set_tides.
+            fill_from_bdyfiles(lev, mf_u,*mf_msku,t_new[lev],xvel_bc(),BdyVars::u,0,0,*xvel_old[lev],dt_lev);
+            fill_from_bdyfiles(lev, mf_v,*mf_mskv,t_new[lev],yvel_bc(),BdyVars::v,0,0,*yvel_old[lev],dt_lev);
         }
 
     if (solverChoice.do_rivers) {
-        river_source_transport->update_interpolated_to_time(t_old[lev]);
+        river_source_transport->update_interpolated_to_time(t_new[lev]);
     }
 #endif
     for ( MFIter mfi(mf_cons, TilingIfNotGPU()); mfi.isValid(); ++mfi )
