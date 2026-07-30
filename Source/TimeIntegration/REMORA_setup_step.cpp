@@ -365,8 +365,15 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
 #ifdef REMORA_USE_NETCDF
     // Get u and v climatology if we're going to do nudging
     if (solverChoice.do_m3_clim_nudg) {
-        u_clim_data_from_file->update_interpolated_to_time(t_new[lev], lev, xvel_new[lev], geom, ref_ratio);
-        v_clim_data_from_file->update_interpolated_to_time(t_new[lev], lev, yvel_new[lev], geom, ref_ratio);
+        // GPU-PARITY (under test): interpolate the momentum climatology to
+        // t_old, matching the tracer path (REMORA_advance_3d.cpp:501,517) which
+        // uses t_old and is measured CLEAN against ROMS. Momentum used t_new and
+        // carries the entire confirmed nudging defect (momentum-only reproduces
+        // zeta 2.0251e-08 at edge 0-2; tracer-only sits at the 1.1545e-15 floor).
+        // The two paths cannot both be right; the clean one uses t_old.
+        // See docs/gpu_port_parity_ledger.md.
+        u_clim_data_from_file->update_interpolated_to_time(t_old[lev], lev, xvel_new[lev], geom, ref_ratio);
+        v_clim_data_from_file->update_interpolated_to_time(t_old[lev], lev, yvel_new[lev], geom, ref_ratio);
     }
 #endif
 
