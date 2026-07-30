@@ -437,6 +437,11 @@ struct SolverChoice {
         // measured against ROMS; 0 is the unmodified behaviour.
         pp.queryAdd("bdy_time_shift",bdy_time_shift);
 
+        // Offset applied to the time at which the tidal harmonics are
+        // evaluated, in seconds. Same diagnostic role as bdy_time_shift: 0 is
+        // the unmodified behaviour, and a scan decides the value.
+        pp.queryAdd("tide_time_shift",tide_time_shift);
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -924,6 +929,7 @@ struct SolverChoice {
     // Also read ubar/vbar from the init file (ROMS non-PERFECT_RESTART set)
     bool init_ubar_from_file = false;
     amrex::Real bdy_time_shift = 0.0;
+    amrex::Real tide_time_shift = 0.0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
