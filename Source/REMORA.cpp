@@ -1931,6 +1931,36 @@ REMORA::ReadParameters ()
     pp.queryAdd("clim_salt_time_varname",clim_salt_time_varname);
     pp.queryAdd("clim_temp_time_varname",clim_temp_time_varname);
 
+    // INPUT PROVENANCE. Every input filename in one block, so a run's own log is
+    // sufficient evidence of what it was actually given.
+    //
+    // This exists because of a concrete failure. The parity campaign against
+    // ROMS turns entirely on the two codes receiving identical inputs, and three
+    // separate false alarms were traced to an input mismatch (rivers on one side
+    // only, climatology nudging on one side only, inverted floating-point
+    // policy). The boundary filename was the worst case: it is never printed
+    // anywhere, and REMORA reports only "Setting up boundary data for u coming
+    // from NetCDF file" with no name, so after a month-long run finished there
+    // was no way to establish from its log which boundary file it had used.
+    amrex::Print() << "=== REMORA INPUT PROVENANCE ===\n";
+    for (int lev = 0; lev < nc_grid_file.size(); ++lev) {
+        for (const auto& f : nc_grid_file[lev]) {
+            amrex::Print() << "  grid[" << lev << "]        : " << f << "\n";
+        }
+    }
+    for (int lev = 0; lev < nc_init_file.size(); ++lev) {
+        for (const auto& f : nc_init_file[lev]) {
+            amrex::Print() << "  init[" << lev << "]        : " << f << "\n";
+        }
+    }
+    for (const auto& f : nc_bdry_file)     { amrex::Print() << "  boundary      : " << f << "\n"; }
+    for (const auto& f : nc_frc_file)      { amrex::Print() << "  forcing       : " << f << "\n"; }
+    for (const auto& f : nc_clim_his_file) { amrex::Print() << "  climatology   : " << f << "\n"; }
+    for (const auto& f : nc_riv_file)      { amrex::Print() << "  rivers        : " << f << "\n"; }
+    amrex::Print() << "  clim coeffs   : " << nc_clim_coeff_file << "\n";
+    amrex::Print() << "  tides         : " << nc_tide_file << "\n";
+    amrex::Print() << "=== end input provenance ===\n";
+
 #endif
     pp.queryAdd("hires_grid_level", hires_grid_level);
     if (hires_grid_level > max_level) {
