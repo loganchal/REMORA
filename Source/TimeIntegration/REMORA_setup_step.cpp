@@ -417,15 +417,20 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         auto ybx_lo = lbound(ybx_adj);
         auto ybx_hi = ubound(ybx_adj);
 
+        // GPU-PARITY: `if`, not `else if`. See note on the y block below; a box
+        // spanning the full domain touches both boundaries and must be shrunk at
+        // both, as ROMS's IstrU:Iend does.
         if (xbx_lo.x == dlo.x) {
             xbx_adj.growLo(0,-1);
-        } else if (xbx_hi.x == dhi.x) {
+        }
+        if (xbx_hi.x == dhi.x) {
             xbx_adj.growHi(0,-1);
         }
 
         if (ybx_lo.y == dlo.y) {
             ybx_adj.growLo(1,-1);
-        } else if (ybx_hi.y == dhi.y) {
+        }
+        if (ybx_hi.y == dhi.y) {
             ybx_adj.growHi(1,-1);
         }
 

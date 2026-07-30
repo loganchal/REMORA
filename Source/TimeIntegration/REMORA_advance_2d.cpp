@@ -262,15 +262,20 @@ REMORA::advance_2d (int lev,
         auto ybxD_lo = lbound(ybxD_adj);
         auto ybxD_hi = ubound(ybxD_adj);
 
+        // GPU-PARITY: `if`, not `else if`. See note on the y block below; a box
+        // spanning the full domain touches both boundaries and must be shrunk at
+        // both, as ROMS's IstrU:Iend does.
         if (xbxD_lo.x == dlo.x) {
             xbxD_adj.growLo(0,-1);
-        } else if (xbxD_hi.x == dhi.x) {
+        }
+        if (xbxD_hi.x == dhi.x) {
             xbxD_adj.growHi(0,-1);
         }
 
         if (ybxD_lo.y == dlo.y) {
             ybxD_adj.growLo(1,-1);
-        } else if (ybxD_hi.y == dhi.y) {
+        }
+        if (ybxD_hi.y == dhi.y) {
             ybxD_adj.growHi(1,-1);
         }
 
