@@ -448,6 +448,16 @@ struct SolverChoice {
         pp.queryAdd("frc_time_shift",frc_time_shift);
         pp.queryAdd("river_time_shift",river_time_shift);
 
+        // Index offset applied to the boundary free-surface value that the
+        // Flather condition consumes, positive = one cell further INTO the
+        // domain on all four sides. Diagnostic knob only; 0 is unmodified.
+        // Exists because the remaining parity error is confined to the outer
+        // ~10 cells and is 100-240x larger for each velocity component on the
+        // boundaries NORMAL to it -- i.e. in the Flather branch -- and that
+        // branch indexes the ZETA boundary array using the box of the variable
+        // being filled (u- or v-nodal), which need not agree.
+        pp.queryAdd("flather_zeta_ioff",flather_zeta_ioff);
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -938,6 +948,7 @@ struct SolverChoice {
     amrex::Real tide_time_shift = 0.0;
     amrex::Real frc_time_shift = 0.0;
     amrex::Real river_time_shift = 0.0;
+    int flather_zeta_ioff = 0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
