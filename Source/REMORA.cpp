@@ -1811,6 +1811,32 @@ REMORA::ReadParameters ()
         if (write_history_file and chunk_history_file) {
             Print() << "NetCDF history files will have " << steps_per_history_file << " steps per file." << std::endl;
         }
+
+        // The avg file needs the same treatment, and did not have it.
+        //
+        // An avg record holds the same fields as a history record, so it has the
+        // same footprint and runs into the same practical per-file ceiling (the
+        // warning above about "tested MPICH versions" is the giveaway: this is an
+        // MPI-IO limit, not a format limit -- the file is created NC_64BIT_DATA,
+        // so CDF-5 could address far more). But the avg writer preallocated
+        // max_step/avg_int records in ONE file, so a 30-day month at avg_int=864
+        // asked for 30 records of ~300 MB and PnetCDF aborted with "Integer type
+        // casting overflow" at the very FIRST write -- after 864 steps of
+        // otherwise perfect integration. Chunk it exactly as the history file is
+        // chunked.
+        pp.queryAdd("chunk_avg_file", chunk_avg_file);
+        pp.queryAdd("steps_per_avg_file", steps_per_avg_file);
+        if (avg_int > 0 and chunk_avg_file and (steps_per_avg_file <= 0)) {
+            steps_per_avg_file = int((two_gb - NCH2D * nx * ny * double_bits)
+                    / (nx * ny * double_bits * (NC3D*nz + NC2D)));
+            if (steps_per_avg_file <= 0) {
+                amrex::Warning("A single avg record appears to exceed the NetCDF output budget. avg output may not work.");
+                steps_per_avg_file = 1;
+            }
+        }
+        if (avg_int > 0 and chunk_avg_file) {
+            Print() << "NetCDF avg files will have " << steps_per_avg_file << " records per file." << std::endl;
+        }
 #endif
     } else {
         amrex::Print() << "User selected plotfile_type = " << plotfile_type_str << std::endl;

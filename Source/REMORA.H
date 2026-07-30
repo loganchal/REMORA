@@ -1700,6 +1700,18 @@ private:
     std::string avg_file_name {"avg"};
     /** \brief Counter for which time index we are writing to in the netcdf avg file */
     int avg_count = 0;
+    /** \brief Whether to chunk the netcdf avg file, as the history file is chunked.
+     *
+        On by default, because the avg file has the same per-record footprint as
+        the history file and the same practical ~2 GB per-file ceiling, but a
+        month of daily averages preallocates far more than that. Turning it off
+        reproduces the previous single-file behaviour. */
+    bool chunk_avg_file = true;
+    /** \brief Number of avg records per netcdf avg file.
+     *
+        -1 is the default and means the code computes it from the grid size to
+        keep each file under the same budget used for the history file. */
+    int steps_per_avg_file = -1;
     /** \brief Number of instantaneous samples accumulated so far in the current window */
     int avg_nsamples = 0;
     /** \brief Whether the accumulators have been allocated */

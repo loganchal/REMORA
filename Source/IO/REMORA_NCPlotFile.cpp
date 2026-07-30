@@ -35,8 +35,9 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF, bool is_avg
     std::string plt_string;
     std::string plotfilename;
     if (is_avg) {
-        // ROMS avg files always hold a series of records in one file, regardless
-        // of how the history file is configured. Chunking is not applied.
+        // ROMS avg files hold a series of records, chunked across files by size
+        // in the same way the history file is: one file per steps_per_avg_file
+        // records, so a long run does not preallocate a single oversized file.
         plotfilename = avg_file_name;
     } else if (REMORA::write_history_file) {
         plotfilename = plot_file_name + "_his";
@@ -44,7 +45,11 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF, bool is_avg
         plotfilename = Concatenate(plot_file_name, which_step, file_min_digits);
     }
     // If chunking, concatenate with which file we're in
-    if ((!is_avg) and REMORA::write_history_file and REMORA::chunk_history_file) {
+    if (is_avg and REMORA::chunk_avg_file and (REMORA::steps_per_avg_file > 0)) {
+        int which_chunk = avg_count / REMORA::steps_per_avg_file;
+        plotfilename = Concatenate(plotfilename, which_chunk, file_min_digits);
+        which_step_in_chunk = avg_count - which_chunk * REMORA::steps_per_avg_file;
+    } else if ((!is_avg) and REMORA::write_history_file and REMORA::chunk_history_file) {
         int which_chunk = history_count / REMORA::steps_per_history_file;
         plotfilename = Concatenate(plotfilename, which_chunk, file_min_digits);
         which_step_in_chunk = history_count - which_chunk * REMORA::steps_per_history_file;
@@ -65,9 +70,12 @@ void REMORA::WriteNCPlotFile(int which_step, MultiFab const* plotMF, bool is_avg
     //       have the IOProcessor move the existing
     //       file/directory to filename.old
     //
-    // The avg file is only rolled aside when we are about to write its first record.
-    const bool rename_existing = is_avg ? (avg_count == 0)
-                                        : ((!REMORA::write_history_file) || (which_step == 0) || (which_step_in_chunk == 0));
+    // The avg file is rolled aside when we are about to write the first record of
+    // a file: record 0 when unchunked, or the first record of each chunk.
+    const bool rename_existing =
+        is_avg ? ((REMORA::chunk_avg_file and (REMORA::steps_per_avg_file > 0))
+                      ? (which_step_in_chunk == 0) : (avg_count == 0))
+               : ((!REMORA::write_history_file) || (which_step == 0) || (which_step_in_chunk == 0));
     if (rename_existing) {
         if (amrex::ParallelDescriptor::IOProcessor()) {
             if (amrex::FileExists(FullPath)) {
@@ -169,6 +177,20 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             nt = nt - last_file_index;
         } else {
             nt = REMORA::steps_per_history_file;
+        }
+    } else if (is_avg && chunk_avg_file && (REMORA::steps_per_avg_file > 0)) {
+        // Same logic for the avg file: every chunk holds steps_per_avg_file
+        // records except possibly the last, which holds the remainder.
+        long long last_file_index =
+            static_cast<long long>(REMORA::steps_per_avg_file) * (nt / REMORA::steps_per_avg_file);
+        if (avg_count >= last_file_index) {
+            nt = nt - last_file_index;
+        } else {
+            nt = REMORA::steps_per_avg_file;
+        }
+        // An exact multiple leaves no remainder, so the final chunk is full.
+        if (nt <= 0) {
+            nt = REMORA::steps_per_avg_file;
         }
     }
 
@@ -825,7 +847,9 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
     // We compute the offsets based on location of the box within the domain
     //
     long long adjusted_history_count = chunk_history_file ? history_count % steps_per_history_file : history_count;
-    long long local_start_nt = is_avg ? static_cast<long long>(avg_count)
+    long long adjusted_avg_count = (chunk_avg_file && (steps_per_avg_file > 0))
+                                       ? avg_count % steps_per_avg_file : avg_count;
+    long long local_start_nt = is_avg ? adjusted_avg_count
                                       : (is_history ? static_cast<long long>(adjusted_history_count)
                                                     : static_cast<long long>(0));
     long long local_nt = 1; // We write data for only one time
