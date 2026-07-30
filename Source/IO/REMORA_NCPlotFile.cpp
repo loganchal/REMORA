@@ -1537,6 +1537,20 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                 auto nc_plot_var = ncf.var("ubar");
                 nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_y, local_start_x }, { local_nt, local_ny, local_nx });
             }
+            // rufrc is DEFINED under `output_forcing && !is_avg` (with Tair,
+            // Uwind, Wstar and the rest of the parity diagnostics), so its write
+            // must carry the same condition. It did not, and an avg record
+            // therefore asked for a variable the avg header had never defined:
+            //
+            //     Writing into level 0 NetCDF avg file nz5km_avg00000_d01.nc
+            //     NetCDF: Variable not found
+            //     amrex::Abort::0::Encountered NetCDF error; aborting !!!
+            //
+            // Unreachable until the avg file was chunked, because before that the
+            // run aborted earlier in the same write. There is also no averaging
+            // accumulator for rufrc, and a time-mean of it is not a quantity
+            // anyone wants -- it is an instantaneous parity diagnostic.
+            if (solverChoice.output_forcing && !is_avg)
             {
                 // rufrc, same staging as ubar directly above.
                 FArrayBox tmp;
