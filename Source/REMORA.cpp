@@ -1160,7 +1160,7 @@ REMORA::set_smflux(int lev)
         // See the note in set_surface_state. The value is under a runtime shift
         // (remora.frc_time_shift, default 0) so a scan can settle it, which is
         // how the analogous set_tides question was finally decided.
-        const Real frc_time = t_new[lev] + solverChoice.frc_time_shift;
+        const Real frc_time = t_old[lev] + solverChoice.frc_time_shift;
         sustr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_sustr[lev].get(), geom, ref_ratio);
         svstr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_svstr[lev].get(), geom, ref_ratio);
         FillPatch(lev, frc_time, *vec_sustr[lev], GetVecOfPtrs(vec_sustr), foextrap_periodic_bc(), BdyVars::null,0,false);
@@ -1225,7 +1225,21 @@ REMORA::set_surface_state (int lev)
     // exactly one timestep behind. That lag is the source of the persistent
     // step-1 tracer offset, since it biases every bulk flux from the first
     // step and never grows or decays away.
-    // ...BUT that measurement compared REMORA's APPLIED forcing against ROMS's
+    // MEASURED, and it is t_old. A four-point scan of remora.frc_time_shift
+    // against the ROMS twin: the STEP-1 error is exactly linear in the offset and
+    // vanishes at -dt. Median |port-ROMS|, every band, every barotropic field:
+    //   shift  -50 -> 2.00x better than shift 0   (predicted 2)
+    //   shift +100 -> 0.50x                       (predicted 0.5)
+    //   shift  -dt -> zeta 1.1e-16..1.2e-14, ubar 6.9e-17..2.0e-16,
+    //                 vbar 8.3e-17..2.0e-16  -- i.e. MACHINE ROUND-OFF,
+    //                 against 2.2e-07 / 5.6e-07 / 5.5e-07 unshifted.
+    // Improvement at step 1: 1e7 to 8e9 depending on field and band. This was the
+    // whole of the "step-1 seed" that the parity campaign had been chasing.
+    //
+    // The reasoning below is why the earlier reading went the other way, kept
+    // because the trap is subtle and general:
+    //
+    // ...that measurement compared REMORA's APPLIED forcing against ROMS's
     // WRITTEN forcing, and those are not the same target. ROMS writes its history
     // record from `output`, which runs after set_data and BEFORE step2d, so record
     // k carries the snapshot interpolated to T0+k*dt -- and then uses it for the
@@ -1243,7 +1257,7 @@ REMORA::set_surface_state (int lev)
     //
     // So the value is a runtime shift (remora.frc_time_shift, default 0) and a
     // scan decides it rather than another reading.
-    const Real frc_time = t_new[lev] + solverChoice.frc_time_shift;
+    const Real frc_time = t_old[lev] + solverChoice.frc_time_shift;
     auto update_from_netcdf = [&](std::unique_ptr<NCTimeSeries>& data_from_file,
                                   Vector<std::unique_ptr<MultiFab>>& mf_vec) {
         data_from_file->update_interpolated_to_time(frc_time, lev, mf_vec[lev].get(), geom, ref_ratio);
