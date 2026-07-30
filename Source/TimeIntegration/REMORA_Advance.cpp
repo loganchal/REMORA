@@ -33,9 +33,26 @@ REMORA::Advance (int lev, Real time, Real dt_lev, int /*iteration*/, int /*ncycl
     // ROMS uses ONE time(ng) for both, so the tide and the boundary data cannot
     // be evaluated a step apart.
     //
-    // Reading this has already misled the audit twice, so the value is a
-    // parameter and a scan decides it. Default 0 preserves current behaviour.
-    set_tides(lev, t_new[lev] + solverChoice.tide_time_shift);
+    // MEASURED, and it is t_old. A four-point scan of remora.tide_time_shift
+    // against the ROMS twin over 40 steps: the step-40 error is exactly LINEAR in
+    // the offset and vanishes at -dt. Median |port-ROMS| at 80+ cells from land,
+    // minus the non-tidal floor of 1.07e-04:
+    //   shift  -50 -> 1.466e-03   (predicted offset 50 s  -> ratio 1)
+    //   shift    0 -> 2.934e-03   (predicted 100 s -> 2)  measured 2.001
+    //   shift +100 -> 5.910e-03   (predicted 200 s -> 4)  measured 4.031
+    // and at -dt the error drops to 1.0698e-04 against 1.0701e-04 for the same
+    // run with remora.tides=false -- i.e. with the tide evaluated at t_old the
+    // tidal code contributes NOTHING to the divergence, to four figures.
+    // Improvement over t_new at 80+ cells: zeta 28.4x, ubar 16.9x, vbar 41.0x,
+    // which are precisely the factors the tide ablation had attributed to "the
+    // tides". Step 1 is unchanged at every shift, because the tidal boundary
+    // error has not yet propagated past the 8-cell edge cut.
+    //
+    // So the tide is evaluated at the time the step STARTS, exactly like the
+    // open-boundary data, and for the same reason: ROMS uses one time(ng) for
+    // both, and `output` writing the pre-step state forces that value to be T0.
+    // The knob stays as a diagnostic and now defaults to no additional shift.
+    set_tides(lev, time + solverChoice.tide_time_shift);
 
     setup_step(lev, time, dt_lev);
 
