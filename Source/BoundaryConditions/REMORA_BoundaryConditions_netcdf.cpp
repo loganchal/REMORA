@@ -90,6 +90,14 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // consistently regardless of the low/high index asymmetry below.
     const int fz_off = solverChoice.flather_zeta_ioff;
 
+    // See REMORA_DataStruct.H. Shifts the pair of cell-centred cells whose h and
+    // zeta feed Cx and zsum, inward on every side, so one knob covers all four
+    // consistently despite the low/high index asymmetry. ROMS's west Flather uses
+    // the two rho cells straddling the u-face it writes; whether REMORA's
+    // dom_lo.x-1 / dom_lo.x is that same pair depends on where the boundary data
+    // box lands, which is measured rather than argued.
+    const int fh_off = solverChoice.flather_hz_ioff;
+
     // Bounds of the cell-centered domain (note: `domain` above has been converted
     // to the nodality of the variable being filled)
     const auto& dlo = amrex::lbound(geom[lev].Domain());
@@ -284,12 +292,13 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.lo(0) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatxlo_zeta(ubound(xlo).x-1+fz_off,j,k,0) + tide_zeta_val;
-                        Real cff = one / (Real(0.5) * (h_arr(dom_lo.x-1,j,0) + zeta_arr(dom_lo.x-1,j,0,icomp_calc)
-                                                     + h_arr(dom_lo.x,j,0) + zeta_arr(dom_lo.x,j,0,icomp_calc)));
+                        const int ia = dom_lo.x-1+fh_off, ib = dom_lo.x+fh_off;
+                        Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
+                                                     + h_arr(ib,j,0) + zeta_arr(ib,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
-                        Real zsum = zeta_arr(dom_lo.x-1,j,0,icomp_calc) + zeta_arr(dom_lo.x,j,0,icomp_calc);
+                        Real zsum = zeta_arr(ia,j,0,icomp_calc) + zeta_arr(ib,j,0,icomp_calc);
                         if (press_comp) {
-                            zsum += fac_pc * (Pair_bc(dom_lo.x-1,j,0) + Pair_bc(dom_lo.x,j,0) - two*OneAtm_pc);
+                            zsum += fac_pc * (Pair_bc(ia,j,0) + Pair_bc(ib,j,0) - two*OneAtm_pc);
                         }
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 - Cx * (Real(0.5) * zsum
@@ -374,12 +383,13 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(0) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x-fz_off,j,k,0) + tide_zeta_val;
-                        Real cff = one / (Real(0.5) * (h_arr(dom_hi.x-1,j,0) + zeta_arr(dom_hi.x-1,j,0,icomp_calc)
-                                                     + h_arr(dom_hi.x,j,0) + zeta_arr(dom_hi.x,j,0,icomp_calc)));
+                        const int ia = dom_hi.x-1-fh_off, ib = dom_hi.x-fh_off;
+                        Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
+                                                     + h_arr(ib,j,0) + zeta_arr(ib,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
-                        Real zsum = zeta_arr(dom_hi.x-1,j,0,icomp_calc) + zeta_arr(dom_hi.x,j,0,icomp_calc);
+                        Real zsum = zeta_arr(ia,j,0,icomp_calc) + zeta_arr(ib,j,0,icomp_calc);
                         if (press_comp) {
-                            zsum += fac_pc * (Pair_bc(dom_hi.x-1,j,0) + Pair_bc(dom_hi.x,j,0) - two*OneAtm_pc);
+                            zsum += fac_pc * (Pair_bc(ia,j,0) + Pair_bc(ib,j,0) - two*OneAtm_pc);
                         }
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 + Cx * (Real(0.5) * zsum
@@ -452,12 +462,13 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.lo(1) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatylo_zeta(i,ubound(ylo).y-1+fz_off,k,0) + tide_zeta_val;
-                        Real cff = one / (Real(0.5) * (h_arr(i,dom_lo.y-1,0) + zeta_arr(i,dom_lo.y-1,0,icomp_calc)
-                                                     + h_arr(i,dom_lo.y,0) + zeta_arr(i,dom_lo.y,0,icomp_calc)));
+                        const int ja = dom_lo.y-1+fh_off, jb = dom_lo.y+fh_off;
+                        Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
+                                                     + h_arr(i,jb,0) + zeta_arr(i,jb,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);
-                        Real zsum = zeta_arr(i,dom_lo.y-1,0,icomp_calc) + zeta_arr(i,dom_lo.y,0,icomp_calc);
+                        Real zsum = zeta_arr(i,ja,0,icomp_calc) + zeta_arr(i,jb,0,icomp_calc);
                         if (press_comp) {
-                            zsum += fac_pc * (Pair_bc(i,dom_lo.y-1,0) + Pair_bc(i,dom_lo.y,0) - two*OneAtm_pc);
+                            zsum += fac_pc * (Pair_bc(i,ja,0) + Pair_bc(i,jb,0) - two*OneAtm_pc);
                         }
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 - Ce * (Real(0.5) * zsum
@@ -534,12 +545,13 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(1) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y-fz_off,k,0) + tide_zeta_val;
-                        Real cff = one / (Real(0.5) * (h_arr(i,dom_hi.y-1,0) + zeta_arr(i,dom_hi.y-1,0,icomp_calc)
-                                                     + h_arr(i,dom_hi.y,0) + zeta_arr(i,dom_hi.y,0,icomp_calc)));
+                        const int ja = dom_hi.y-1-fh_off, jb = dom_hi.y-fh_off;
+                        Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
+                                                     + h_arr(i,jb,0) + zeta_arr(i,jb,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);
-                        Real zsum = zeta_arr(i,dom_hi.y-1,0,icomp_calc) + zeta_arr(i,dom_hi.y,0,icomp_calc);
+                        Real zsum = zeta_arr(i,ja,0,icomp_calc) + zeta_arr(i,jb,0,icomp_calc);
                         if (press_comp) {
-                            zsum += fac_pc * (Pair_bc(i,dom_hi.y-1,0) + Pair_bc(i,dom_hi.y,0) - two*OneAtm_pc);
+                            zsum += fac_pc * (Pair_bc(i,ja,0) + Pair_bc(i,jb,0) - two*OneAtm_pc);
                         }
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 + Ce * (Real(0.5) * zsum

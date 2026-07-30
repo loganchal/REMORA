@@ -457,6 +457,7 @@ struct SolverChoice {
         // branch indexes the ZETA boundary array using the box of the variable
         // being filled (u- or v-nodal), which need not agree.
         pp.queryAdd("flather_zeta_ioff",flather_zeta_ioff);
+        pp.queryAdd("flather_hz_ioff",flather_hz_ioff);
 
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
@@ -949,6 +950,13 @@ struct SolverChoice {
     amrex::Real frc_time_shift = 0.0;
     amrex::Real river_time_shift = 0.0;
     int flather_zeta_ioff = 0;
+    // Shifts the PAIR of cell-centred cells whose h and zeta feed Cx and zsum in
+    // the Flather condition, inward (positive) on every side. ROMS's west branch
+    // uses h/zeta at (Istr-1, Istr) -- the two rho cells straddling the u-face it
+    // writes -- and the equivalent REMORA pair depends on which face index the
+    // boundary data box lands on. Positive moves both cells one further into the
+    // domain. Diagnostic: 0 must reproduce current behaviour exactly.
+    int flather_hz_ioff = 0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
