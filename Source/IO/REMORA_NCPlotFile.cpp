@@ -857,10 +857,28 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
     {
         auto nc_plot_var = ncf.var("ocean_time");
         //nc_plot_var.par_access(NC_COLLECTIVE);
-        // ROMS set_avg.F:1782-1789: AVGtime = AVGtime + nAVG*dt, i.e. the model
-        // time at the end of the averaging window, which is t_new after the last
-        // accumulated step.
-        nc_plot_var.put(&t_new[lev], { local_start_nt }, { local_nt });
+        // ROMS stamps an avg record at the CENTRE of its averaging window, not at
+        // the end. An earlier reading of this cited only set_avg.F's increment
+        // (AVGtime = AVGtime + nAVG*dt) and concluded "end of window", missing the
+        // initialisation in def_avg.F:2863,
+        //
+        //     AVGtime(ng) = time(ng) + 0.5_r8 * REAL(nAVG(ng),r8) * dt(ng)
+        //
+        // which offsets the whole series back by half a window. Confirmed against
+        // a real ROMS avg file: nz5km_avg_200907.nc starts its month at -4416 h
+        // and stamps its first daily record at -4404 h, i.e. +12 h into a 24 h
+        // window.
+        //
+        // Writing t_new put every REMORA avg record half a window LATER than the
+        // ROMS record covering the same steps. The averaged values were unaffected
+        // -- the same steps go into the same window either way -- but the labels
+        // were, which defeats any record-matched comparison against ROMS and can
+        // shift a record across a day boundary in downstream daily-climatology
+        // code that keys on ocean_time.
+        Real avg_time = is_avg
+            ? t_new[lev] - Real(0.5) * Real(REMORA::avg_int) * dt[lev]
+            : t_new[lev];
+        nc_plot_var.put(&avg_time, { local_start_nt }, { local_nt });
     }
     // do all independent writes
     //ncmpi_end_indep_data(ncf.ncid);

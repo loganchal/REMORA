@@ -13,8 +13,14 @@
  *      source: `avgzeta = avgzeta + zeta(Kout)`),
  *   - the window holds exactly nAVG samples (set_avg.F:674-677 reset logic),
  *   - at the end of the window the sums are multiplied by fac = 1/nAVG and the
- *     record is stamped with the model time at the end of the window
- *     (set_avg.F:1782-1800, `AVGtime = AVGtime + nAVG*dt`),
+ *     record is stamped with the model time at the CENTRE of the window. ROMS
+ *     builds that stamp from two places, and reading only the second gives the
+ *     wrong answer: def_avg.F:2863 initialises
+ *     `AVGtime = time + 0.5*nAVG*dt` and set_avg.F:2297 then increments by a
+ *     full `nAVG*dt`, so the series sits half a window before each window's end.
+ *     Verified against nz5km_avg_200907.nc, which starts at -4416 h and stamps
+ *     its first daily record at -4404 h. The time is applied in
+ *     REMORA_NCPlotFile.cpp; this file only decides when a window closes,
  *   - the accumulators are then zeroed for the next window.
  *
  * NOTE (CUDA): the two functions here that launch device lambdas
