@@ -848,6 +848,11 @@ REMORA::advance_2d (int lev,
 
 #ifdef REMORA_USE_NETCDF
         if (solverChoice.do_rivers) {
+            // t_old here but t_new + river_time_shift for river_source_transport
+            // (advance_3d.cpp) and river_source_cons (prestep.cpp). That
+            // inconsistency is pre-existing and is left visible rather than
+            // silently harmonised: a scan of remora.river_time_shift decides which
+            // is right, the same way it decided set_tides.
             river_source_transportbar->update_interpolated_to_time(t_old[lev]);
             int* river_direction_d = river_direction.data();
             for ( MFIter mfi(*mf_rhoS, TilingIfNotGPU()); mfi.isValid(); ++mfi )

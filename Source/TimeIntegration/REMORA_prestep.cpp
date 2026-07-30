@@ -148,7 +148,7 @@ REMORA::prestep (int lev,
             if (solverChoice.do_rivers_cons[i_comp]) {
                 // t_new: external forcing is read after the clock advances in
                 // ROMS. See the note in Advance() on set_tides.
-                river_source_cons[i_comp]->update_interpolated_to_time(t_new[lev]);
+                river_source_cons[i_comp]->update_interpolated_to_time(t_new[lev] + solverChoice.river_time_shift);
                 fab_river_source = river_source_cons[i_comp]->fab_interp;
             }
             const Array4<const int>& river_pos = (solverChoice.do_rivers) ? vec_river_position[lev]->const_array(mfi) : Array4<const int>();

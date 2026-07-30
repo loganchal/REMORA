@@ -442,6 +442,12 @@ struct SolverChoice {
         // the unmodified behaviour, and a scan decides the value.
         pp.queryAdd("tide_time_shift",tide_time_shift);
 
+        // Same diagnostic role for the surface forcing and the river data, both
+        // of which are still read at t_new while the boundary and climatology
+        // paths were moved to t_old. 0 is the unmodified behaviour.
+        pp.queryAdd("frc_time_shift",frc_time_shift);
+        pp.queryAdd("river_time_shift",river_time_shift);
+
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
         pp.queryAdd("coriolis_beta",coriolis_beta);
@@ -930,6 +936,8 @@ struct SolverChoice {
     bool init_ubar_from_file = false;
     amrex::Real bdy_time_shift = 0.0;
     amrex::Real tide_time_shift = 0.0;
+    amrex::Real frc_time_shift = 0.0;
+    amrex::Real river_time_shift = 0.0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)

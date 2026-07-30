@@ -1157,10 +1157,10 @@ REMORA::set_smflux(int lev)
         prob->init_analytic_smflux(lev, geom[lev], solverChoice, *this,*vec_sustr[lev], *vec_svstr[lev]);
     } else if (solverChoice.smflux_type == SMFluxType::netcdf) {
 #ifdef REMORA_USE_NETCDF
-        // t_new, not t_old -- see the note in set_surface_state: ROMS advances
-        // its clock before reading forcing, so a step uses the snapshot at the
-        // time it is stepping to.
-        const Real frc_time = t_new[lev];
+        // See the note in set_surface_state. The value is under a runtime shift
+        // (remora.frc_time_shift, default 0) so a scan can settle it, which is
+        // how the analogous set_tides question was finally decided.
+        const Real frc_time = t_new[lev] + solverChoice.frc_time_shift;
         sustr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_sustr[lev].get(), geom, ref_ratio);
         svstr_data_from_file->update_interpolated_to_time(frc_time, lev, vec_svstr[lev].get(), geom, ref_ratio);
         FillPatch(lev, frc_time, *vec_sustr[lev], GetVecOfPtrs(vec_sustr), foextrap_periodic_bc(), BdyVars::null,0,false);
@@ -1225,7 +1225,25 @@ REMORA::set_surface_state (int lev)
     // exactly one timestep behind. That lag is the source of the persistent
     // step-1 tracer offset, since it biases every bulk flux from the first
     // step and never grows or decays away.
-    const Real frc_time = t_new[lev];
+    // ...BUT that measurement compared REMORA's APPLIED forcing against ROMS's
+    // WRITTEN forcing, and those are not the same target. ROMS writes its history
+    // record from `output`, which runs after set_data and BEFORE step2d, so record
+    // k carries the snapshot interpolated to T0+k*dt -- and then uses it for the
+    // step that STARTS at T0+k*dt. Matching the written field aligns the labels
+    // while leaving the consumption one step apart, and a diagnostic comparison
+    // cannot see that. This is the same shape as the set_tides defect, which was
+    // also argued from a reading, also "verified" against the wrong target, and
+    // turned out to need t_old (see REMORA_Advance.cpp).
+    //
+    // Quantitatively consistent with what is measured now: hourly CFSR forcing
+    // over a 100 s step changes the wind stress by ~2.8e-06 N/m^2, and the port's
+    // sustr differs from ROMS's by a domain-wide median of 2.1e-06 N/m^2 while
+    // Pair is bit-exact -- exactly what a one-step consumption offset looks like
+    // when both codes label the snapshot by its interpolation time.
+    //
+    // So the value is a runtime shift (remora.frc_time_shift, default 0) and a
+    // scan decides it rather than another reading.
+    const Real frc_time = t_new[lev] + solverChoice.frc_time_shift;
     auto update_from_netcdf = [&](std::unique_ptr<NCTimeSeries>& data_from_file,
                                   Vector<std::unique_ptr<MultiFab>>& mf_vec) {
         data_from_file->update_interpolated_to_time(frc_time, lev, mf_vec[lev].get(), geom, ref_ratio);

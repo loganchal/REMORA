@@ -211,7 +211,7 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         }
 
     if (solverChoice.do_rivers) {
-        river_source_transport->update_interpolated_to_time(t_new[lev]);
+        river_source_transport->update_interpolated_to_time(t_new[lev] + solverChoice.river_time_shift);
     }
 #endif
     for ( MFIter mfi(mf_cons, TilingIfNotGPU()); mfi.isValid(); ++mfi )
