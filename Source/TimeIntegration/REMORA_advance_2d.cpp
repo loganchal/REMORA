@@ -793,9 +793,22 @@ REMORA::advance_2d (int lev,
         }
     }
 
-    // Don't do the FillPatch or rivers at the last truncated predictor step.
-    // We may need to move the zeta FillPatch further up
-    if (my_iif<nfast) {
+    // GPU-PARITY: ROMS applies the 2D boundary conditions on the auxiliary
+    // (nfast+1) predictor step as well. main3d.F:599-628 loops
+    // `my_iif=1,MAXVAL(nfast)+1` and calls step2d whenever
+    // `my_iif <= nfast(ng)+1`, and step2d calls zetabc/u2dbc/v2dbc every time.
+    // REMORA's loop is 0-based over `my_iif = 0..nfast` (nfast_counter-1), so
+    // the old guard `my_iif < nfast` skipped exactly the step corresponding to
+    // ROMS's auxiliary nfast+1 -- one missing boundary application per
+    // baroclinic step, boundary-only, acting on zeta first. That matches the
+    // measured defect (zeta 2.2847e-04 at edge 0-2 against a 4.5729e-09
+    // interior) and the once-per-baroclinic-step timing established by the
+    // nfast 61-vs-121 null. See docs/gpu_port_parity_ledger.md.
+    //
+    // The corrector is still skipped on the last step (in advance_2d_onestep,
+    // `my_iif < nfast_counter-1`), which does match ROMS: main3d.F:673 guards
+    // the corrector with `iif < nfast+1`.
+    if (my_iif<=nfast) {
         int know;
         Real dt2d;
         if (my_iif==0) {
