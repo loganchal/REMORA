@@ -785,22 +785,46 @@ REMORA::advance_2d (int lev,
         }
     }
 
-    // GPU-PARITY: ROMS applies the 2D boundary conditions on the auxiliary
-    // (nfast+1) predictor step as well. main3d.F:599-628 loops
-    // `my_iif=1,MAXVAL(nfast)+1` and calls step2d whenever
-    // `my_iif <= nfast(ng)+1`, and step2d calls zetabc/u2dbc/v2dbc every time.
-    // REMORA's loop is 0-based over `my_iif = 0..nfast` (nfast_counter-1), so
-    // the old guard `my_iif < nfast` skipped exactly the step corresponding to
-    // ROMS's auxiliary nfast+1 -- one missing boundary application per
-    // baroclinic step, boundary-only, acting on zeta first. That matches the
-    // measured defect (zeta 2.2847e-04 at edge 0-2 against a 4.5729e-09
-    // interior) and the once-per-baroclinic-step timing established by the
-    // nfast 61-vs-121 null. See docs/gpu_port_parity_ledger.md.
+    // GPU-PARITY: ROMS applies NO 2D boundary condition and NO river momentum
+    // source on the auxiliary (nfast+1) barotropic step. An earlier comment here
+    // asserted the opposite -- "step2d calls zetabc/u2dbc/v2dbc every time" --
+    // and the guard was widened to `my_iif<=nfast` on the strength of it. The
+    // preprocessed ROMS source that was actually compiled says otherwise
+    // (atlas external/moana_spec/, from step2d.F -> step2d_LF_AM3.h):
     //
-    // The corrector is still skipped on the last step (in advance_2d_onestep,
-    // `my_iif < nfast_counter-1`), which does match ROMS: main3d.F:673 guards
-    // the corrector with `iif < nfast+1`.
-    if (my_iif<=nfast) {
+    //   step2d.f90:887-889   "Do not perform the actual time stepping during
+    //                         the auxiliary (nfast(ng)+1) time step."
+    //                         IF (iif(ng).gt.nfast(ng)) RETURN
+    //
+    // and every routine this block is the analogue of sits AFTER that return:
+    //
+    //   step2d.f90:1005  LwSrc  mass point source
+    //   step2d.f90:1020  CALL zetabc_tile
+    //   step2d.f90:1665  CALL u2dbc_tile
+    //   step2d.f90:1670  CALL v2dbc_tile
+    //   step2d.f90:1695  LuvSrc river momentum point source
+    //
+    // It is deliberate, not incidental. main3d.f90:736-738 states what the
+    // auxiliary step is for: "No actual time-stepping is performed during the
+    // auxiliary (nfast+1) time-step. It is needed to finalize the fast-time
+    // averaging of 2D fields". Everything before the return -- Drhs/DUon/DVom
+    // and the Zt_avg1/DU_avg1/DV_avg1/DU_avg2/DV_avg2 accumulation
+    // (step2d.f90:750-863) -- does run; nothing is time-stepped, so there is no
+    // new state to apply a boundary condition to. The only boundary work ROMS
+    // does on that step is the periodic exchange of the *averaged* fields
+    // (step2d.f90:869-885), which is a no-op in this non-periodic domain.
+    //
+    // REMORA's loop is 0-based, `my_iif = 0..nfast` (REMORA_Advance.cpp:61,71
+    // and REMORA_TimeStepML.cpp:107,109), i.e. `my_iif == iif-1`, so
+    // `my_iif == nfast` IS ROMS's auxiliary step. The port already mirrors the
+    // early return at line ~395 above (`if (my_iif>=nfast) continue;`) -- but
+    // that `continue` only escapes the MFIter loop, and this block sits outside
+    // it, so it was not covered. `my_iif<nfast` is the guard that matches.
+    //
+    // The corrector is skipped on the same step (advance_2d_onestep,
+    // `my_iif < nfast_counter-1`), which matches main3d.f90:766 guarding the
+    // corrector call with `IF (iif(ng).lt.(nfast(ng)+1))`.
+    if (my_iif<nfast) {
         int know;
         Real dt2d;
         if (my_iif==0) {
