@@ -459,6 +459,7 @@ struct SolverChoice {
         pp.queryAdd("flather_zeta_ioff",flather_zeta_ioff);
         pp.queryAdd("flather_hz_ioff",flather_hz_ioff);
         pp.queryAdd("flather_dump",flather_dump);
+        pp.queryAdd("frc_edge_from_file",frc_edge_from_file);
 
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
@@ -961,6 +962,11 @@ struct SolverChoice {
     // Dump the west Flather ingredients on the first N calls (see
     // REMORA_BoundaryConditions_netcdf.cpp). Diagnostic only.
     int flather_dump = 0;
+    // 1 (default, ROMS behaviour): keep the outermost ring of every NetCDF
+    // forcing field as read from the file, which is ROMS's boundary row.
+    // 0 restores the previous foextrap overwrite, so the change can be A/B'd
+    // against the ROMS twin rather than asserted.
+    int frc_edge_from_file = 1;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)

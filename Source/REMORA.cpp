@@ -1261,8 +1261,43 @@ REMORA::set_surface_state (int lev)
     auto update_from_netcdf = [&](std::unique_ptr<NCTimeSeries>& data_from_file,
                                   Vector<std::unique_ptr<MultiFab>>& mf_vec) {
         data_from_file->update_interpolated_to_time(frc_time, lev, mf_vec[lev].get(), geom, ref_ratio);
+
+        // The forcing file carries ONE RING BEYOND the interior cells --
+        // 397x467 against remora.n_cell 395x465 -- and that ring is exactly
+        // ROMS's boundary row (REMORA cell i is ROMS rho i+1, so REMORA's
+        // ghost -1 is ROMS's rho 0). fill_fab_from_arrays already lands it in
+        // ghost ring 1: its cell-centred branch builds the box as
+        // [-1, nsx-2], so file column 0 goes to index -1.
+        //
+        // The foextrap in the FillPatch below then OVERWROTE that genuine
+        // value with a copy of the nearest interior cell. That is not cosmetic:
+        // u2dbc_im.F's PRESS_COMPENSATE branch reads Pair(Istr-1,j), i.e.
+        // precisely this ring, so the overwrite went straight into the
+        // normal-component barotropic boundary condition on every open edge.
+        //
+        // Measured against instrumented ROMS at the first sub-step, before
+        // anything had evolved: REMORA's two Pair cells were bit-identical to
+        // each other (0.0) while ROMS's differed by 0.0928 mb, and REMORA's
+        // interior cell matched ROMS's to 1.1e-13. Same defect in every field
+        // read through this lambda, which is why THE SPLIT saw Uwind, Vwind,
+        // Tair, Pair and swrad all clean at rim 1 and dirty at rim 0.
+        //
+        // Ring 1 is preserved and FillPatch is left to supply only rings >= 2,
+        // which the file cannot provide and which ROMS does not have at all.
+        // Inter-box ghosts in ring 1 are equally valid to restore: the netCDF
+        // read covers the whole grown domain, so they hold true file values too.
+        const bool keep_edge = (solverChoice.frc_edge_from_file != 0);
+        const IntVect ring(1,1,0);
+        MultiFab saved;
+        if (keep_edge) {
+            saved.define(mf_vec[lev]->boxArray(), mf_vec[lev]->DistributionMap(), 1, ring);
+            MultiFab::Copy(saved, *mf_vec[lev], 0, 0, 1, ring);
+        }
         FillPatch(lev, frc_time, *mf_vec[lev], GetVecOfPtrs(mf_vec),
                   foextrap_periodic_bc(), BdyVars::null, 0, false);
+        if (keep_edge) {
+            MultiFab::Copy(*mf_vec[lev], saved, 0, 0, 1, ring);
+        }
     };
 
     if (bulk_flux_type[BulkFlux::Uwind] == BulkForcingType::netcdf && !driver_atmos_state_from_driver[AtmosState::Uwind]) {
