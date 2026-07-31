@@ -103,6 +103,32 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // box lands, which is measured rather than argued.
     const int fh_off = solverChoice.flather_hz_ioff;
 
+    // ROMS applies the Flather condition ONLY to the component NORMAL to a
+    // boundary. For the TANGENTIAL component -- vbar on west/east, ubar on
+    // south/north -- u2dbc_im.F:897 and v2dbc_im.F:900 take a Chapman-implicit
+    // branch instead, under the same `LBC(...)%Flather` test:
+    //
+    //     ELSE IF (LBC(isouth,isUbar,ng)%Flather .or. %reduced .or. %Shchepetkin)
+    //       ubar(i,Jstr-1,kout) = cff2*(ubar(i,Jstr-1,know) + Ce*ubar(i,Jstr,kout))
+    //
+    // REMORA's input sets `flather` on all four sides of both components, and
+    // the dispatch below took the Flather branch for all of them, so the two
+    // tangential sides of each component ran a different condition from ROMS.
+    //
+    // The Chapman branch already handles the staggered case correctly: its
+    // `j - mf_index_type[1]` pattern collapses to no averaging for cell-centred
+    // zeta and averages across the face for a tangential momentum component,
+    // which is exactly ROMS's `pm(Istr,j-1), pm(Istr,j)` pair. So this is a
+    // dispatch fix, not new arithmetic.
+    //
+    // remora.flather_tangent_chapman=0 restores the previous behaviour, so the
+    // change can be A/B'd against the ROMS twin rather than asserted.
+    const bool tangent_chapman = (solverChoice.flather_tangent_chapman != 0);
+    // On x-normal boundaries (west/east) vbar is tangential; on y-normal
+    // boundaries (south/north) ubar is tangential.
+    const bool tangent_x = tangent_chapman && (bccomp == vbar_bc());
+    const bool tangent_y = tangent_chapman && (bccomp == ubar_bc());
+
     // remora.flather_dump = K dumps the west Flather ingredients on call K (see
     // the print site below). The counter is function-local and host side,
     // incremented once per call before the box loop, so it counts calls rather
@@ -309,7 +335,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                     Real bry_val = bdatxlo(ubound(xlo).x,j,k,0) + tide_val;
                     if (bcr.lo(0) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
-                    } else if (bcr.lo(0) == REMORABCType::flather) {
+                    } else if (bcr.lo(0) == REMORABCType::flather && !tangent_x) {
                         Real bry_val_zeta = bdatxlo_zeta(ubound(xlo).x-1+fz_off,j,k,0) + tide_zeta_val;
                         const int ia = dom_lo.x-1+fh_off, ib = dom_lo.x+fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
@@ -338,7 +364,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                                    zeta_arr(ia,j,0,icomp_calc), zeta_arr(ib,j,0,icomp_calc),
                                    mask_arr(i,j,0));
                         }
-                    } else if (bcr.lo(0) == REMORABCType::chapman) {
+                    } else if (bcr.lo(0) == REMORABCType::chapman ||
+                               (bcr.lo(0) == REMORABCType::flather && tangent_x)) {
                         Real cff = dt_calc * Real(0.5) * (pm(dom_lo.x,j-mf_index_type[1],0) + pm(dom_lo.x,j,0));
                         Real cff1 = std::sqrt(g * Real(0.5) * (h_arr(dom_lo.x,j-mf_index_type[1],0)
                                     + zeta_arr(dom_lo.x,j-mf_index_type[1],0,icomp_calc) + h_arr(dom_lo.x,j,0)
@@ -416,7 +443,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                     Real bry_val = bdatxhi(lbound(xhi).x,j,k,0) + tide_val;
                     if (bcr.hi(0) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
-                    } else if (bcr.hi(0) == REMORABCType::flather) {
+                    } else if (bcr.hi(0) == REMORABCType::flather && !tangent_x) {
                         Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x-fz_off,j,k,0) + tide_zeta_val;
                         const int ia = dom_hi.x-1-fh_off, ib = dom_hi.x-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
@@ -429,7 +456,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 + Cx * (Real(0.5) * zsum
                                     - bry_val_zeta)) * mask_arr(i,j,0);
-                    } else if (bcr.hi(0) == REMORABCType::chapman) {
+                    } else if (bcr.hi(0) == REMORABCType::chapman ||
+                               (bcr.hi(0) == REMORABCType::flather && tangent_x)) {
                         Real cff = dt_calc * Real(0.5) * (pm(dom_hi.x,j-mf_index_type[1],0) + pm(dom_hi.x,j,0));
                         Real cff1 = std::sqrt(g * Real(0.5) * (h_arr(dom_hi.x,j-mf_index_type[1],0)
                                     + zeta_arr(dom_hi.x,j-mf_index_type[1],0,icomp_calc) + h_arr(dom_hi.x,j,0)
@@ -495,7 +523,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                     Real bry_val = bdatylo(i,ubound(ylo).y,k,0) + tide_val;
                     if (bcr.lo(1) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
-                    } else if (bcr.lo(1) == REMORABCType::flather) {
+                    } else if (bcr.lo(1) == REMORABCType::flather && !tangent_y) {
                         Real bry_val_zeta = bdatylo_zeta(i,ubound(ylo).y-1+fz_off,k,0) + tide_zeta_val;
                         const int ja = dom_lo.y-1+fh_off, jb = dom_lo.y+fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
@@ -508,7 +536,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 - Ce * (Real(0.5) * zsum
                                     - bry_val_zeta)) * mask_arr(i,j,0);
-                    } else if (bcr.lo(1) == REMORABCType::chapman) {
+                    } else if (bcr.lo(1) == REMORABCType::chapman ||
+                               (bcr.lo(1) == REMORABCType::flather && tangent_y)) {
                         Real cff = dt_calc * Real(0.5) * (pn(i-mf_index_type[0],dom_lo.y,0) + pn(i,dom_lo.y,0));
                         Real cff1 = std::sqrt(g * Real(0.5) * (h_arr(i-mf_index_type[0],dom_lo.y,0) +
                                     zeta_arr(i-mf_index_type[0],dom_lo.y,0,icomp_calc) + h_arr(i,dom_lo.y,0)
@@ -578,7 +607,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                     Real bry_val = bdatyhi(i,lbound(yhi).y,k,0) + tide_val;
                     if (bcr.hi(1) == REMORABCType::clamped) {
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
-                    } else if (bcr.hi(1) == REMORABCType::flather) {
+                    } else if (bcr.hi(1) == REMORABCType::flather && !tangent_y) {
                         Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y-fz_off,k,0) + tide_zeta_val;
                         const int ja = dom_hi.y-1-fh_off, jb = dom_hi.y-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
@@ -591,7 +620,8 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 + Ce * (Real(0.5) * zsum
                                     - bry_val_zeta)) * mask_arr(i,j,0);
-                    } else if (bcr.hi(1) == REMORABCType::chapman) {
+                    } else if (bcr.hi(1) == REMORABCType::chapman ||
+                               (bcr.hi(1) == REMORABCType::flather && tangent_y)) {
                         Real cff = dt_calc * Real(0.5) * (pn(i-mf_index_type[0],dom_hi.y,0) + pn(i,dom_hi.y,0));
                         Real cff1 = std::sqrt(g * Real(0.5) * (h_arr(i-mf_index_type[0],dom_hi.y,0)
                                                           + zeta_arr(i-mf_index_type[0],dom_hi.y,0,icomp_calc) +

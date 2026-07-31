@@ -459,6 +459,7 @@ struct SolverChoice {
         pp.queryAdd("flather_zeta_ioff",flather_zeta_ioff);
         pp.queryAdd("flather_hz_ioff",flather_hz_ioff);
         pp.queryAdd("flather_dump",flather_dump);
+        pp.queryAdd("flather_tangent_chapman",flather_tangent_chapman);
 
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
@@ -961,6 +962,12 @@ struct SolverChoice {
     // Dump the west Flather ingredients on the first N calls (see
     // REMORA_BoundaryConditions_netcdf.cpp). Diagnostic only.
     int flather_dump = 0;
+    // ROMS applies Flather only to the component NORMAL to a boundary and a
+    // Chapman-implicit condition to the tangential one, under the same
+    // LBC%Flather test (u2dbc_im.F:897, v2dbc_im.F:900). 1 matches ROMS;
+    // 0 restores REMORA's previous Flather-on-all-four-sides behaviour so the
+    // change can be A/B'd.
+    int flather_tangent_chapman = 1;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
