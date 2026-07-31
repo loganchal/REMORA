@@ -2,6 +2,8 @@
 #define REMORA_LoopBounds_H
 
 #include <AMReX_Box.H>
+#include <AMReX_BLassert.H>
+#include <AMReX_Extension.H>
 
 /**
  * \brief Shrink a face-centred tile box to ROMS's momentum-equation loop range.
