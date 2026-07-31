@@ -1,4 +1,5 @@
 #include <REMORA.H>
+#include <REMORA_LoopBounds.H>
 
 using namespace amrex;
 
@@ -109,6 +110,14 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         Box xbx = mfi.nodaltilebox(0);
         Box ybx = mfi.nodaltilebox(1);
 
+        // GPU-PARITY: step3d_uv.F steps `u` over `DO j=Jstr,Jend ;
+        // DO i=IstrU,Iend` (313), runs the SPLINES_VVISC tridiagonal on the same
+        // range (352-462) and replaces the vertical mean on it too (470); `v`
+        // likewise over `DO j=JstrV,Jend ; DO i=Istr,Iend`. The domain-edge
+        // normal face is set by u3dbc/v3dbc afterwards, not stepped.
+        Box xbx_adj = roms_mom_box(xbx, Geom(lev).Domain(), 0);
+        Box ybx_adj = roms_mom_box(ybx, Geom(lev).Domain(), 1);
+
         Box gbx2D = gbx2;
         gbx2D.makeSlab(2,0);
 
@@ -137,13 +146,13 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
             cff=Real(0.25)*dt_lev*Real(23.0)/Real(12.0);
         }
 
-        ParallelFor(xbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        ParallelFor(xbx_adj, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             u(i,j,k) += cff * (pm(i,j,0)+pm(i-1,j,0)) * (pn(i,j,0)+pn(i-1,j,0)) * ru(i,j,k,nrhs);
             u(i,j,k) *= two / (Hz(i-1,j,k) + Hz(i,j,k));
         });
 
-        ParallelFor(ybx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+        ParallelFor(ybx_adj, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             v(i,j,k) += cff * (pm(i,j,0)+pm(i,j-1,0)) * (pn(i,j,0)+pn(i,j-1,0)) * rv(i,j,k,nrhs);
             v(i,j,k) *= two / (Hz(i,j-1,k) + Hz(i,j,k));
@@ -153,28 +162,28 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
         // NOTE: may not actually need to set these to zero
 
         // Reset to zero on the box on which they'll be used
-        mf_DC[mfi].template setVal<RunOn::Device>(zero,xbx);
-        fab_CF.template     setVal<RunOn::Device>(zero,xbx);
+        mf_DC[mfi].template setVal<RunOn::Device>(zero,xbx_adj);
+        fab_CF.template     setVal<RunOn::Device>(zero,xbx_adj);
 
-        vert_visc_3d(xbx,1,0,u,Hz,Hzk,AK,Akv,BC,DC,FC,CF,nnew,N,dt_lev);
-
-        // Reset to zero on the box on which they'll be used
-        mf_DC[mfi].template setVal<RunOn::Device>(zero,ybx);
-        fab_CF.template     setVal<RunOn::Device>(zero,ybx);
-
-        vert_visc_3d(ybx,0,1,v,Hz,Hzk,AK,Akv,BC,DC,FC,CF,nnew,N,dt_lev);
+        vert_visc_3d(xbx_adj,1,0,u,Hz,Hzk,AK,Akv,BC,DC,FC,CF,nnew,N,dt_lev);
 
         // Reset to zero on the box on which they'll be used
-        mf_DC[mfi].template setVal<RunOn::Device>(zero,xbx);
-        fab_CF.template     setVal<RunOn::Device>(zero,xbx);
+        mf_DC[mfi].template setVal<RunOn::Device>(zero,ybx_adj);
+        fab_CF.template     setVal<RunOn::Device>(zero,ybx_adj);
 
-        vert_mean_3d(xbx,1,0,u,Hz,DU_avg1,DC,CF,pn,msku,nnew,N);
+        vert_visc_3d(ybx_adj,0,1,v,Hz,Hzk,AK,Akv,BC,DC,FC,CF,nnew,N,dt_lev);
 
         // Reset to zero on the box on which they'll be used
-        mf_DC[mfi].template setVal<RunOn::Device>(zero,ybx);
-        fab_CF.template     setVal<RunOn::Device>(zero,ybx);
+        mf_DC[mfi].template setVal<RunOn::Device>(zero,xbx_adj);
+        fab_CF.template     setVal<RunOn::Device>(zero,xbx_adj);
 
-        vert_mean_3d(ybx,0,1,v,Hz,DV_avg1,DC,CF,pm,mskv,nnew,N);
+        vert_mean_3d(xbx_adj,1,0,u,Hz,DU_avg1,DC,CF,pn,msku,nnew,N);
+
+        // Reset to zero on the box on which they'll be used
+        mf_DC[mfi].template setVal<RunOn::Device>(zero,ybx_adj);
+        fab_CF.template     setVal<RunOn::Device>(zero,ybx_adj);
+
+        vert_mean_3d(ybx_adj,0,1,v,Hz,DV_avg1,DC,CF,pm,mskv,nnew,N);
     }
 
     // Refresh the halos before applying the boundary conditions. vert_mean_3d

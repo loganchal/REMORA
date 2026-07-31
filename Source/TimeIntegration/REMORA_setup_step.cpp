@@ -1,4 +1,5 @@
 #include <REMORA.H>
+#include <REMORA_LoopBounds.H>
 
 using namespace amrex;
 
@@ -106,6 +107,14 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     FillPatchNoBC(lev, time, *xvel_new[lev], xvel_new, BdyVars::u);
     FillPatchNoBC(lev, time, *yvel_new[lev], yvel_new, BdyVars::v);
 
+    // rhs_uv_3d ASSIGNS the vertical integral into rufrc/rvfrc (matching
+    // rhs3d.F:1536/1603), so this zeroing is no longer load-bearing for the
+    // valid region -- it only guarantees that the cells no kernel writes (the
+    // ghosts, and the domain-edge normal faces that ROMS's IstrU:Iend / JstrV:Jend
+    // loops exclude) hold zero rather than stale values from the previous
+    // baroclinic step. Keep it: uv3dmix accumulates onto rufrc afterwards, and
+    // a persistent MultiFab carrying last step's forcing at the edge is exactly
+    // the shape of a spurious growing barotropic mode.
     mf_rufrc->setVal(zero);
     mf_rvfrc->setVal(zero);
 
@@ -130,9 +139,6 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
     }
 
     auto N = Geom(lev).Domain().size()[2]-1; // Number of vertical "levs" aka, NZ
-
-    const auto dlo = amrex::lbound(Geom(lev).Domain());
-    const auto dhi = amrex::ubound(Geom(lev).Domain());
 
     for ( MFIter mfi(S_new, TilingIfNotGPU()); mfi.isValid(); ++mfi )
     {
@@ -416,36 +422,20 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         Box tbxp2 = bx;
         Box xbx = mfi.nodaltilebox(0);
         Box ybx = mfi.nodaltilebox(1);
-        Box xbx_adj = mfi.nodaltilebox(0);
-        Box ybx_adj = mfi.nodaltilebox(1);
 
-        auto xbx_lo = lbound(xbx_adj);
-        auto xbx_hi = ubound(xbx_adj);
-        auto ybx_lo = lbound(ybx_adj);
-        auto ybx_hi = ubound(ybx_adj);
-
-        // GPU-PARITY: `if`, not `else if`. See note on the y block below; a box
-        // spanning the full domain touches both boundaries and must be shrunk at
-        // both, as ROMS's IstrU:Iend does.
-        if (xbx_lo.x == dlo.x) {
-            xbx_adj.growLo(0,-1);
-        }
-        if (xbx_hi.x == dhi.x) {
-            xbx_adj.growHi(0,-1);
-        }
-
-        if (ybx_lo.y == dlo.y) {
-            ybx_adj.growLo(1,-1);
-        }
-        if (ybx_hi.y == dhi.y) {
-            ybx_adj.growHi(1,-1);
-        }
+        // GPU-PARITY: rhs3d.F writes `ru` only over `DO j=Jstr,Jend ;
+        // DO i=IstrU,Iend` (491, 542, 947, 1536) and `rv` only over
+        // `DO j=JstrV,Jend ; DO i=Istr,Iend`; prsgrd32.h:303/367 the same. The
+        // domain-edge normal face is left to u3dbc/v3dbc. So every 3D momentum
+        // kernel below takes the trimmed box, not the raw nodaltilebox.
+        Box xbx_adj = roms_mom_box(xbx, Geom(lev).Domain(), 0);
+        Box ybx_adj = roms_mom_box(ybx, Geom(lev).Domain(), 1);
 
         Box gbx1 = mfi.growntilebox(IntVect(NGROW-1,NGROW-1,0));
         Box gbx2 = mfi.growntilebox(IntVect(NGROW,NGROW,0));
 
-        Box utbx = mfi.nodaltilebox(0);
-        Box vtbx = mfi.nodaltilebox(1);
+        Box utbx = xbx_adj;
+        Box vtbx = ybx_adj;
 
         tbxp1.grow(IntVect(NGROW-1,NGROW-1,0));
         tbxp2.grow(IntVect(NGROW,NGROW,0));
@@ -508,13 +498,13 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
             //
             // ru, rv updated
             // In ROMS, coriolis is the first (un-ifdefed) thing to happen in rhs3d_tile, which gets called after t3dmix
-            coriolis(xbx, ybx, uold, vold, ru, rv, Hz, fomn, nrhs, nrhs);
+            coriolis(xbx_adj, ybx_adj, uold, vold, ru, rv, Hz, fomn, nrhs, nrhs);
         }
 
         if (solverChoice.use_curvilinear_grid) {
             Array4<Real const> const& dndx = vec_dndx[lev]->const_array(mfi);
             Array4<Real const> const& dmde = vec_dmde[lev]->const_array(mfi);
-            curvilinear(bx, xbx, ybx, uold, vold, ru, rv, Hz, dndx, dmde, nrhs, nrhs);
+            curvilinear(bx, xbx_adj, ybx_adj, uold, vold, ru, rv, Hz, dndx, dmde, nrhs, nrhs);
         }
 
 #ifdef REMORA_USE_NETCDF
@@ -532,13 +522,13 @@ REMORA::setup_step (int lev, Real time, Real dt_lev)
         ////rufrc from 3d is set to ru, then the wind stress (and bottom stress) is added, then the mixing is added
         //rufrc=ru+sustr*om_u*on_u
 
-        rhs_uv_3d(lev, xbx, ybx, uold, vold, ru, rv, rufrc, rvfrc,
+        rhs_uv_3d(lev, xbx_adj, ybx_adj, uold, vold, ru, rv, rufrc, rvfrc,
                   sustr, svstr, bustr, bvstr, Huon, Hvom,
                   pm, pn, W, FC, nrhs, N);
 
         if(solverChoice.use_uv3dmix) {
             const int nnew = 0;
-            uv3dmix(xbx, ybx, u, v, uold, vold, rufrc, rvfrc, visc2_p, visc2_r, Hz, pm, pn, mskp, nrhs, nnew, dt_lev);
+            uv3dmix(xbx_adj, ybx_adj, u, v, uold, vold, rufrc, rvfrc, visc2_p, visc2_r, Hz, pm, pn, mskp, nrhs, nnew, dt_lev);
         }
     } // MFIter
 

@@ -231,11 +231,26 @@ REMORA::rhs_uv_3d (int lev,
     Gpu::synchronize();
 
     AMREX_ASSERT(xbx.smallEnd(2) == 0 && xbx.bigEnd(2) == N);
+    // ROMS rhs3d.F:1536 ASSIGNS `rufrc(i,j)=ru(i,j,1,nrhs)` and only then
+    // accumulates k=2..N onto it, so `rufrc`'s previous contents are irrelevant
+    // there. This loop used to ACCUMULATE straight into `rufrc(i,j,0)`, which
+    // was correct only because `setup_step.cpp` calls `mf_rufrc->setVal(zero)`
+    // beforehand -- an invariant held in a different file with nothing enforcing
+    // it. Had that zeroing ever been moved or made conditional, `rufrc` would
+    // have become a per-baroclinic-step accumulator, i.e. exactly the
+    // exponentially growing barotropic mode this campaign is hunting, and
+    // nothing would have failed loudly.
+    //
+    // Summing into a local and storing once removes the dependency instead of
+    // documenting it. It is bit-identical to the old code: the additions happen
+    // in the same order, each rounding the same way, and `rufrc` was zero on
+    // entry.
     ParallelFor(makeSlab(xbx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int)
     {
+       Real acc = zero;
        for (int k = 0; k <= N; ++k)
        {
-          rufrc(i,j,0) += ru(i,j,k,nrhs);
+          acc += ru(i,j,k,nrhs);
 
           Real om_u = two / (pm(i-1,j,0)+pm(i,j,0));
           Real on_u = two / (pn(i-1,j,0)+pn(i,j,0));
@@ -244,8 +259,9 @@ REMORA::rhs_uv_3d (int lev,
           Real cff1 = (k == N) ?  sustr(i,j,0)*cff : zero;
           Real cff2 = (k == 0) ? -bustr(i,j,0)*cff : zero;
 
-          rufrc(i,j,0) += cff1+cff2;
+          acc += cff1+cff2;
        }
+       rufrc(i,j,0) = acc;
     });
 
     if (uv_hadv_scheme == AdvectionScheme::upstream3) {
@@ -388,11 +404,13 @@ REMORA::rhs_uv_3d (int lev,
 
     Gpu::synchronize();
 
+    // Assign, not accumulate: see the note on rufrc above (rhs3d.F:1603).
     ParallelFor(makeSlab(ybx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int)
     {
+       Real acc = zero;
        for (int k = 0; k <= N; ++k)
        {
-          rvfrc(i,j,0) += rv(i,j,k,nrhs);
+          acc += rv(i,j,k,nrhs);
 
           Real om_v = two / (pm(i,j-1,0)+pm(i,j,0));
           Real on_v = two / (pn(i,j-1,0)+pn(i,j,0));
@@ -401,7 +419,8 @@ REMORA::rhs_uv_3d (int lev,
           Real cff1 = (k == N) ?  svstr(i,j,0)*cff : zero;
           Real cff2 = (k == 0) ? -bvstr(i,j,0)*cff : zero;
 
-          rvfrc(i,j,0) += cff1+cff2;
+          acc += cff1+cff2;
        }
+       rvfrc(i,j,0) = acc;
     });
 }

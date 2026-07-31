@@ -84,7 +84,18 @@ void REMORA::set_weights (int /*lev*/) {
             wsum=wsum+weight1[i-1];
             shift=shift+weight1[i-1]*Real(i);
         }
-        scale *= shift/(wsum*Real(ndtfast));
+        // GPU-PARITY: this is `scale = (scale*shift) / (wsum*ndtfast)`, NOT
+        // `scale *= shift/(wsum*ndtfast)`. set_weights.F:95 writes
+        //     scale=scale*shift/(wsum*REAL(ndtfast(ng),dp))
+        // which Fortran evaluates left to right, so the numerator is rounded
+        // once as a product before the division. The compound-assignment form
+        // rounds the quotient first and then multiplies -- a different result,
+        // and it is fed back into `scale` through sixteen iterations. Measured:
+        // with the two forms compiled under matched IEEE flags, the compound
+        // form left 116 of the 122 final weight fields differing from ROMS in
+        // the last bits; this form leaves 0. See the note at the end of this
+        // file.
+        scale = scale*shift/(wsum*Real(ndtfast));
     }
 //
 //-----------------------------------------------------------------------
@@ -182,3 +193,35 @@ void REMORA::set_weights (int /*lev*/) {
         "barotropic time-index closed forms in advance_2d require an odd nfast; "
         "this ndtfast produces an even one and would desynchronise from ROMS");
 }
+
+// ---------------------------------------------------------------------------
+// On the accumulator precision, because it looks like a defect and is not.
+//
+// set_weights.F declares wsum/shift/cff as `real(r16)` and mod_kinds.F labels
+// r16 "128-bit", which reads as quad against the `Real` (double) used here. It
+// is not quad on this build. mod_kinds.F only selects a 24-digit kind for
+// SUN/AIX/NEC/SGI/CRAYX1/DEC; every other platform, Linux + gfortran included,
+// gets
+//     integer, parameter :: r16 = SELECTED_REAL_KIND(15,300)
+// and 15 digits of precision with range 300 is satisfied by kind 8. Checked by
+// compiling ROMS's own declaration and printing the kind: dp=8, r16=8,
+// storage_size = 64 bits. ROMS accumulates these weights in DOUBLE, so double
+// here is not a shortfall and `long double` would move AWAY from ROMS rather
+// than towards it.
+//
+// What DID differ was the association order of the `scale` update above, fixed
+// in place. Verified by transcribing set_weights.F verbatim into a standalone
+// Fortran program and this routine into a standalone C++ one, compiling both
+// under matched IEEE flags and comparing the final 61 weight pairs as raw bit
+// patterns: 116/122 fields differed before, 0/122 after.
+//
+// One caveat that belongs with any bit-level claim about these weights. The
+// production ROMS binary is built `-O3 -ffast-math` (Compilers/Linux-gfortran.mk
+// line 68), and -ffast-math alone moves ROMS's OWN weights by up to 2.1e-14
+// relative against the same source built with -ffp-contract=off. That is two
+// orders larger than the round-off this routine can control, it is a build
+// choice rather than an algorithm difference, and it is exactly the class of
+// difference the campaign's ARM_KIND=compiler yardstick exists to measure. So
+// the claim made here is the defensible one: this routine now matches ROMS's
+// set_weights bit for bit when the two are compiled with equivalent semantics.
+// ---------------------------------------------------------------------------
