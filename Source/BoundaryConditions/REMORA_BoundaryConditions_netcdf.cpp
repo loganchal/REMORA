@@ -1,5 +1,10 @@
 #include "REMORA.H"
 
+// For the remora.flather_dump diagnostic below, which printfs from inside the
+// boundary kernel. CUDA supports printf in device code; this makes the
+// declaration available on the host build path too.
+#include <cstdio>
+
 using namespace amrex;
 
 #ifdef REMORA_USE_NETCDF
@@ -97,6 +102,16 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // dom_lo.x-1 / dom_lo.x is that same pair depends on where the boundary data
     // box lands, which is measured rather than argued.
     const int fh_off = solverChoice.flather_hz_ioff;
+
+    // remora.flather_dump = N dumps the west Flather ingredients on the first N
+    // calls (see the print site below). The counter is function-local and host
+    // side, incremented once per call before the box loop, so it counts calls
+    // rather than boxes or cells.
+    static int fla_dump_calls = 0;
+    const bool do_dump = (solverChoice.flather_dump > 0) &&
+                         (bccomp == ubar_bc()) &&
+                         (fla_dump_calls < solverChoice.flather_dump);
+    if (solverChoice.flather_dump > 0 && bccomp == ubar_bc()) { ++fla_dump_calls; }
 
     // Bounds of the cell-centered domain (note: `domain` above has been converted
     // to the nodality of the variable being filled)
@@ -303,6 +318,22 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 - Cx * (Real(0.5) * zsum
                                     - bry_val_zeta)) * mask_arr(i,j,0);
+                        // Diagnostic (remora.flather_dump). On the FIRST call of
+                        // the run nothing has evolved yet, so every ingredient is
+                        // still exactly what the initial-condition and boundary
+                        // files hold -- which means ROMS's values for the same
+                        // cells can be computed offline from those files and
+                        // diffed against these, with no matching ROMS patch and
+                        // no matching build. Printing rather than plumbing four
+                        // scratch MultiFabs through the plotfile machinery: this
+                        // fires once, on one boundary, and is off by default.
+                        if (do_dump) {
+                            printf("FLADUMP west %d %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
+                                   j, bry_val, bry_val_zeta, Cx, zsum,
+                                   h_arr(ia,j,0), h_arr(ib,j,0),
+                                   zeta_arr(ia,j,0,icomp_calc), zeta_arr(ib,j,0,icomp_calc),
+                                   mask_arr(i,j,0));
+                        }
                     } else if (bcr.lo(0) == REMORABCType::chapman) {
                         Real cff = dt_calc * Real(0.5) * (pm(dom_lo.x,j-mf_index_type[1],0) + pm(dom_lo.x,j,0));
                         Real cff1 = std::sqrt(g * Real(0.5) * (h_arr(dom_lo.x,j-mf_index_type[1],0)

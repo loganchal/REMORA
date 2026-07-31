@@ -458,6 +458,7 @@ struct SolverChoice {
         // being filled (u- or v-nodal), which need not agree.
         pp.queryAdd("flather_zeta_ioff",flather_zeta_ioff);
         pp.queryAdd("flather_hz_ioff",flather_hz_ioff);
+        pp.queryAdd("flather_dump",flather_dump);
 
         //coriolis factor
         pp.queryAdd("coriolis_f0",coriolis_f0);
@@ -957,6 +958,9 @@ struct SolverChoice {
     // boundary data box lands on. Positive moves both cells one further into the
     // domain. Diagnostic: 0 must reproduce current behaviour exactly.
     int flather_hz_ioff = 0;
+    // Dump the west Flather ingredients on the first N calls (see
+    // REMORA_BoundaryConditions_netcdf.cpp). Diagnostic only.
+    int flather_dump = 0;
 
     // Barotropic tidal forcing at open boundaries (ROMS SSH_TIDES/UV_TIDES with
     // ADD_FSOBC/ADD_M2OBC), and the tidal reference time origin [days] (TIDE_START)
