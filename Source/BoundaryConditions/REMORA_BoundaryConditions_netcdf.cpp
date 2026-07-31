@@ -343,12 +343,23 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         // separates predictor sub-steps (2*dtfast) from corrector
                         // ones (dtfast), which is the other thing ROMS keys on.
                         if (do_dump) {
-                            printf("FLADUMP west %d %d %.17e %d %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
+                            // Pair printed per CELL, not folded into zsum. The
+                            // sub-step comparison found the inverse-barometer
+                            // term already wrong at call 1 -- a static offset,
+                            // before anything has evolved -- while every other
+                            // ingredient was exact. `ia` is the outermost rho
+                            // column, which is the one-cell ring where the meteo
+                            // fields are known to differ; `ib` is interior, where
+                            // they are bit-exact. Summing them cannot tell those
+                            // apart, so they are separated here.
+                            printf("FLADUMP west %d %d %.17e %d %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
                                    dump_call, j, dt_calc, icomp_calc,
                                    bry_val, bry_val_zeta, Cx, zsum,
                                    h_arr(ia,j,0), h_arr(ib,j,0),
                                    zeta_arr(ia,j,0,icomp_calc), zeta_arr(ib,j,0,icomp_calc),
-                                   mask_arr(i,j,0));
+                                   mask_arr(i,j,0),
+                                   press_comp ? Pair_bc(ia,j,0) : Real(0.0),
+                                   press_comp ? Pair_bc(ib,j,0) : Real(0.0));
                         }
                     } else if (bcr.lo(0) == REMORABCType::chapman) {
                         Real cff = dt_calc * Real(0.5) * (pm(dom_lo.x,j-mf_index_type[1],0) + pm(dom_lo.x,j,0));
