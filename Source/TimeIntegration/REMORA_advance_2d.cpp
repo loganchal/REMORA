@@ -824,7 +824,12 @@ REMORA::advance_2d (int lev,
     // The corrector is skipped on the same step (advance_2d_onestep,
     // `my_iif < nfast_counter-1`), which matches main3d.f90:766 guarding the
     // corrector call with `IF (iif(ng).lt.(nfast(ng)+1))`.
-    if (my_iif<nfast) {
+    // DELIBERATELY WRONG. Do not merge. This branch exists only as the positive
+    // control for the auxiliary-step A/B: `my_iif<nfast-1` additionally skips
+    // the LAST REAL barotropic substep, whose `knew` IS consumed, so it must
+    // move the solution. It proves the arm-against-arm readout can see a change
+    // made at this site, which a 0.0 result cannot establish on its own.
+    if (my_iif<nfast-1) {
         int know;
         Real dt2d;
         if (my_iif==0) {
