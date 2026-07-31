@@ -1,4 +1,9 @@
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <AMReX_ParmParse.H>
+#include <AMReX_Print.H>
 #include <REMORA_DataStruct.H>
 #include <REMORA.H>
 #include <REMORA_prob_common.H>
@@ -180,6 +185,44 @@ void REMORA::set_weights (int /*lev*/) {
     for(int i=1;i<=nfast;i++) {
         weight1[i-1]=wsum*weight1[i-1];
         weight2[i-1]=cff*weight2[i-1];
+    }
+
+    // Report the weights in ROMS's own format, so the two tables can be diffed
+    // rather than described. set_weights.F:196-233 writes the same header and
+    // FORMAT (i3,4f19.16) with the same four columns -- primary, secondary, and
+    // the two running accumulations. Off by default, since ROMS prints it only
+    // under LwrtInfo and this is 61 lines a run:
+    //     remora.print_weights = 1
+    // A hex column is appended, because f19.16 cannot resolve a double's last
+    // bits and the last bits are the whole question here. Compare against
+    // analysis/gpu_port/set_weights_bitcheck in the atlas repo.
+    {
+        int print_weights = 0;
+        amrex::ParmParse pp("remora");
+        pp.query("print_weights", print_weights);
+        if (print_weights) {
+            amrex::Print() << "\n Time Splitting Weights: ndtfast = " << ndtfast
+                           << "    nfast = " << nfast << "\n"
+                           << " ==================================\n\n"
+                           << "    Primary            Secondary          "
+                           << "Accumulated to Current Step        hex(primary)"
+                           << "      hex(secondary)\n\n";
+            Real acc1 = zero, acc2 = zero;
+            for (int i=1;i<=nfast;i++) {
+                acc1 += weight1[i-1];
+                acc2 += weight2[i-1];
+                std::uint64_t b1, b2;
+                std::memcpy(&b1, &weight1[i-1], sizeof(b1));
+                std::memcpy(&b2, &weight2[i-1], sizeof(b2));
+                char line[256];
+                std::snprintf(line, sizeof(line),
+                              "%3d%19.16f%19.16f%19.16f%19.16f  %016llX  %016llX",
+                              i, weight1[i-1], weight2[i-1], acc1, acc2,
+                              static_cast<unsigned long long>(b1),
+                              static_cast<unsigned long long>(b2));
+                amrex::Print() << line << "\n";
+            }
+        }
     }
 
     // advance_2d derives the barotropic time indices krhs/kstp from closed
