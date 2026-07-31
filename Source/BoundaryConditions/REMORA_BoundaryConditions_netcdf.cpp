@@ -103,15 +103,19 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // box lands, which is measured rather than argued.
     const int fh_off = solverChoice.flather_hz_ioff;
 
-    // remora.flather_dump = N dumps the west Flather ingredients on the first N
-    // calls (see the print site below). The counter is function-local and host
-    // side, incremented once per call before the box loop, so it counts calls
-    // rather than boxes or cells.
+    // remora.flather_dump = K dumps the west Flather ingredients on call K (see
+    // the print site below). The counter is function-local and host side,
+    // incremented once per call before the box loop, so it counts calls rather
+    // than boxes or cells.
     static int fla_dump_calls = 0;
+    if (solverChoice.flather_dump > 0 && bccomp == ubar_bc()) { ++fla_dump_calls; }
+    // The knob selects WHICH call to dump, not how many. The first call is
+    // trivially clean -- nothing has evolved -- so the interesting question is
+    // whether the ingredients still agree part-way through a barotropic loop,
+    // and dumping every call up to that point would bury it in output.
     const bool do_dump = (solverChoice.flather_dump > 0) &&
                          (bccomp == ubar_bc()) &&
-                         (fla_dump_calls < solverChoice.flather_dump);
-    if (solverChoice.flather_dump > 0 && bccomp == ubar_bc()) { ++fla_dump_calls; }
+                         (fla_dump_calls == solverChoice.flather_dump);
 
     // Bounds of the cell-centered domain (note: `domain` above has been converted
     // to the nodality of the variable being filled)
