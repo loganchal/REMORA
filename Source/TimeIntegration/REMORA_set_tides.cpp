@@ -93,17 +93,46 @@ REMORA::set_tides (int lev, Real time)
     const MultiFab& mf_Cmax   = tide_data_from_file->Cmax();
     const MultiFab& mf_Cmin   = tide_data_from_file->Cmin();
 
+    // The tide fields' coverage must be measured from the DOMAIN, not from the
+    // local box. `growntilebox(1,1,0)` grows whatever box it is handed: with one
+    // box that is the domain plus its outer rho ring, which is the intent and
+    // exactly what ROMS's IstrR-1..IendR gives on a single tile. With several
+    // boxes it is each BOX plus one ring, so the rings that lie two or three
+    // cells the other side of an internal box cut are never written and keep the
+    // setVal(zero) from make_new_level -- while the open-boundary kernels in
+    // REMORA_BoundaryConditions_netcdf.cpp read Etide/Utide/Vtide across the
+    // whole FAB (their tangential loop bound is the FAB's own extent, not
+    // validbox+-1). Nothing FillBoundary's these three MultiFabs, so nothing
+    // repairs the gap afterwards.
+    //
+    // The result is a tide that silently drops to zero on a few boundary rows
+    // either side of every internal cut, i.e. a defect that appears ONLY where
+    // an internal box edge meets a physical boundary -- and is invisible in a
+    // single-box run, which is every verification arm this campaign has run.
+    //
+    // These three boxes are the single-box coverage intersected with this FAB,
+    // so they reproduce the one-box cell set exactly for any decomposition and
+    // are a bit-for-bit no-op when there is only one box. They stay inside
+    // `domain` grown by one, which is also the only region where the inputs
+    // (Eamp/Ephase/Cmax/Cmin/Cangle/Cphase from REMORA_NCTideData.cpp:125-135
+    // and angler from :190-198) are read from file; rings 2 and 3 outside the
+    // domain are zero there too, so growing further would fabricate values.
+    const Box dom2d = makeSlab(geom[lev].Domain(),2,0);
+    const Box dom_r = amrex::grow(dom2d, IntVect(1,1,0));
+    const Box dom_u = amrex::grow(amrex::convert(dom2d,IntVect(1,0,0)), IntVect(0,1,0));
+    const Box dom_v = amrex::grow(amrex::convert(dom2d,IntVect(0,1,0)), IntVect(1,0,0));
+
 #ifdef AMREX_USE_OMP
 #pragma omp parallel if (Gpu::notInLaunchRegion())
 #endif
     for (MFIter mfi(*vec_Etide[lev], TilingIfNotGPU()); mfi.isValid(); ++mfi)
     {
         // rho points, one ghost ring: ROMS IstrR-1..IendR, JstrR-1..JendR coverage
-        Box bx_r = mfi.growntilebox(IntVect(1,1,0));
+        Box bx_r = mfi.growntilebox(IntVect(NGROW+1,NGROW+1,0)) & dom_r;
         // u faces of this grid, one ghost row in y: ROMS Istr..IendR, JstrR..JendR
-        Box bx_u = mfi.grownnodaltilebox(0, IntVect(0,1,0));
+        Box bx_u = mfi.grownnodaltilebox(0, IntVect(NGROW,NGROW,0)) & dom_u;
         // v faces of this grid, one ghost column in x: ROMS IstrR..IendR, Jstr..JendR
-        Box bx_v = mfi.grownnodaltilebox(1, IntVect(1,0,0));
+        Box bx_v = mfi.grownnodaltilebox(1, IntVect(NGROW,NGROW,0)) & dom_v;
 
         const Array4<Real      >& Etide  = vec_Etide[lev]->array(mfi);
         const Array4<Real      >& Utide  = vec_Utide[lev]->array(mfi);
