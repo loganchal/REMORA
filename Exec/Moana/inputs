@@ -149,10 +149,24 @@ remora.tides      = true
 remora.tide_start = 0.0              # roms.in TIDE_START (days)
 
 # ----------------------------------------------------------- rivers
-# roms.in LuvSrc=T, LtracerSrc=F T -- momentum and SALT only. The temperature
-# river source was switched off in roms.in on 2026-07-19; leaving it on here
-# injected river heat ROMS never applies. Invisible at step 0 (rivers act only
-# during stepping) and a guaranteed divergence thereafter.
+# THIS FILE IS THE **PRODUCTION** CONFIGURATION. The production roms.in switched
+# LtracerSrc(itemp) T->F on 2026-07-19, so the temperature river source is off
+# here: momentum and SALT only.
+#
+# It is NOT the parity configuration. The parity arms compare against the
+# REPLICATION2009 ROMS run-in, which predates that change and carries
+# `LtracerSrc == T T`. A parity arm must therefore OVERRIDE do_rivers_temp to
+# true, and does so automatically: hpc/remora_moana_run.slurm sources
+# hpc/roms_ext/parity_physics.sh in the atlas repo, appends
+# `remora.do_rivers_temp=...` to the command line, and runs
+# hpc/roms_ext/parity_preflight.py, which aborts the arm if this file's
+# effective settings and the ROMS run-in disagree on any comparable knob.
+#
+# Do not "fix" the line below to make a parity arm work. It is right for what
+# this file is for, and the harness is what knows which experiment is running.
+# Getting that wrong in the other direction is what produced the 1e-05 coastal
+# error chased for weeks as a port defect (atlas
+# docs/gpu_port_parity_ledger.md, 2026-07-31).
 remora.do_rivers_temp  = false
 remora.do_rivers_salt  = true
 
