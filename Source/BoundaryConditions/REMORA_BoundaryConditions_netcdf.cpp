@@ -109,13 +109,21 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // than boxes or cells.
     static int fla_dump_calls = 0;
     if (solverChoice.flather_dump > 0 && bccomp == ubar_bc()) { ++fla_dump_calls; }
-    // The knob selects WHICH call to dump, not how many. The first call is
-    // trivially clean -- nothing has evolved -- so the interesting question is
-    // whether the ingredients still agree part-way through a barotropic loop,
-    // and dumping every call up to that point would bury it in output.
+    // The knob selects HOW MANY calls to dump, counting from the first. Call 1
+    // is trivially clean -- nothing has evolved yet -- and was already confirmed
+    // exact against values reconstructed from the ini/grid/bnd files. What that
+    // could not reach is calls 2..N, where every ingredient depends on the
+    // evolving state. Those need ROMS's own numbers (FLADUMP=ON in
+    // hpc/roms_ext/build_roms_rhoout.slurm), and comparing them call-by-call is
+    // what names the sub-step at which the two codes part.
     const bool do_dump = (solverChoice.flather_dump > 0) &&
                          (bccomp == ubar_bc()) &&
-                         (fla_dump_calls == solverChoice.flather_dump);
+                         (fla_dump_calls <= solverChoice.flather_dump);
+    // Plain local copy: `fla_dump_calls` is a host-side static, and a device
+    // lambda cannot capture one. `do_dump` was safe because it is a const bool
+    // captured by value; the counter has to be given the same treatment before
+    // it can appear inside the kernel.
+    const int dump_call = fla_dump_calls;
 
     // Bounds of the cell-centered domain (note: `domain` above has been converted
     // to the nodality of the variable being filled)
@@ -322,18 +330,22 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = (bry_val
                                 - Cx * (Real(0.5) * zsum
                                     - bry_val_zeta)) * mask_arr(i,j,0);
-                        // Diagnostic (remora.flather_dump). On the FIRST call of
-                        // the run nothing has evolved yet, so every ingredient is
-                        // still exactly what the initial-condition and boundary
-                        // files hold -- which means ROMS's values for the same
-                        // cells can be computed offline from those files and
-                        // diffed against these, with no matching ROMS patch and
-                        // no matching build. Printing rather than plumbing four
-                        // scratch MultiFabs through the plotfile machinery: this
-                        // fires once, on one boundary, and is off by default.
+                        // Diagnostic (remora.flather_dump), matched by FLADUMP=ON
+                        // in hpc/roms_ext/build_roms_rhoout.slurm which prints the
+                        // same quantities from ROMS's u2dbc_im.F.
+                        //
+                        // `call` and `icomp_calc` are printed alongside the values
+                        // because the alignment against ROMS must be on the
+                        // SUB-STEP, not on two counters assumed to advance
+                        // together. ROMS prints `iif` and `know`; `icomp_calc` is
+                        // REMORA's `know` (0-based here, 1-based there, so compare
+                        // the pattern of switches, not the integer). dt_calc
+                        // separates predictor sub-steps (2*dtfast) from corrector
+                        // ones (dtfast), which is the other thing ROMS keys on.
                         if (do_dump) {
-                            printf("FLADUMP west %d %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
-                                   j, bry_val, bry_val_zeta, Cx, zsum,
+                            printf("FLADUMP west %d %d %.17e %d %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
+                                   dump_call, j, dt_calc, icomp_calc,
+                                   bry_val, bry_val_zeta, Cx, zsum,
                                    h_arr(ia,j,0), h_arr(ib,j,0),
                                    zeta_arr(ia,j,0,icomp_calc), zeta_arr(ib,j,0,icomp_calc),
                                    mask_arr(i,j,0));
