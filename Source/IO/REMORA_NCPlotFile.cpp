@@ -419,6 +419,33 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
             }
         }
 
+        // Turbulence-closure prognostic variables, same story as the Ak's:
+        // REMORA holds tke and gls on w-faces and writes the rho-point average
+        // of the two bracketing w-faces, so a ROMS comparison must average
+        // ROMS's w-point tke/gls the same way. Names match ROMS's idMtke/idMtls.
+        for (const auto& tvname : {"tke", "gls"}) {
+            int comp = -1;
+            for (int i = 0; i < names_3d.size(); i++) {
+                if (names_3d[i] == tvname) comp = i;
+            }
+            if (comp >= 0) {
+                const bool is_tke = (std::string(tvname) == "tke");
+                ncf.def_var_fill(tvname, ncutils::NCDType::Real, { nt_name, nz_r_name, ny_r_name, nx_r_name }, &netcdf_fill_value);
+                ncf.var(tvname).put_attr("long_name",
+                        is_tke ? "turbulent kinetic energy, q2 (rho-point average of the w-face values)"
+                               : "turbulent length scale, q2l (rho-point average of the w-face values)");
+                ncf.var(tvname).put_attr("units", is_tke ? "meter2 second-2" : "meter3 second-2");
+                ncf.var(tvname).put_attr("staggering",
+                        "prognostic on w-faces (0:N); written here as 0.5*(w(k)+w(k+1)) on s_rho");
+                ncf.var(tvname).put_attr("time_level",
+                        "closure 'new' time level (istep%2) at the end of the completed baroclinic step");
+                ncf.var(tvname).put_attr("time","ocean_time");
+                ncf.var(tvname).put_attr("grid","grid");
+                ncf.var(tvname).put_attr("location","face");
+                ncf.var(tvname).put_attr("coordinates","x_rho y_rho s_rho ocean_time");
+            }
+        }
+
         {
             int comp = -1;
             for (int i = 0; i < names_3d.size(); i++) {
@@ -1326,6 +1353,24 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                 int comp = -1;
                 for (int i = 0; i < names_3d.size(); i++) {
                     if (names_3d[i] == akname) comp = i;
+                }
+                if (comp >= 0) {
+                    FArrayBox tmp;
+                    tmp.resize(tmp_bx, 1, amrex::The_Pinned_Arena());
+                    tmp.template copy<RunOn::Device>((*plotMF)[mfi.index()], comp, 0, 1);
+                    Gpu::streamSynchronize();
+
+                    auto nc_plot_var = ncf.var(names_3d[comp]);
+                    nc_plot_var.put(tmp.dataPtr(), { local_start_nt, local_start_z, local_start_y, local_start_x }, { local_nt,
+                            local_nz, local_ny, local_nx });
+                }
+            }
+
+            // Turbulence-closure prognostics (same rho-centred layout as the Ak's)
+            for (const auto& tvname : {"tke", "gls"}) {
+                int comp = -1;
+                for (int i = 0; i < names_3d.size(); i++) {
+                    if (names_3d[i] == tvname) comp = i;
                 }
                 if (comp >= 0) {
                     FArrayBox tmp;

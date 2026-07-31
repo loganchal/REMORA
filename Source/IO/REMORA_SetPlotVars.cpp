@@ -70,6 +70,16 @@ REMORA::set3DPlotVariables (const std::string& pp_plot_var_names_3d)
         }
     }
 
+    // Turbulence-closure PROGNOSTIC variables (tke = q^2, gls = q^2*l for
+    // MY2.5). Same w-faces as Akv, same cell-centred treatment. Must stay in
+    // the same order here as in REMORA_Plotfile.cpp, since the NetCDF writer
+    // indexes plotMF by position in this list.
+    for (const auto& tv : {"tke", "gls"}) {
+        if (containerHasElement(plot_var_names_3d, tv)) {
+            tmp_plot_names.push_back(tv);
+        }
+    }
+
     // If we are asked for any location component, we will provide them all
     if (containerHasElement(plot_var_names_3d, "x_cc") ||
         containerHasElement(plot_var_names_3d, "y_cc") ||

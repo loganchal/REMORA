@@ -385,6 +385,26 @@ REMORA::WritePlotFile (int istep_for_plot)
         copy_ak_to_cc("Akt", *vec_Akt[lev], Temp_comp);
         copy_ak_to_cc("Aks", *vec_Akt[lev], Salt_comp);
 
+        // Turbulence-closure PROGNOSTIC variables. Akv is a DERIVED quantity
+        // (a stability function times q*l), so a discrepancy in Akv cannot on
+        // its own say whether the closure is generating an error or merely
+        // amplifying one it was handed. tke and gls are the fields that are
+        // actually time-stepped, once per baroclinic step, so comparing them
+        // against ROMS separates driver from responder.
+        //
+        // vec_tke/vec_gls live on the same w-faces as Akv (they are built with
+        // convert(ba,IntVect(0,0,1))), so they get the identical rho-point
+        // average, and a ROMS comparison must average the ROMS w-point field
+        // the same way.
+        //
+        // Component index: the MultiFabs carry 3 time levels. advance_3d is
+        // entered with iic = istep[lev] BEFORE the post-step increment and sets
+        // nstp = iic%2, nnew = 1-nstp; istep[lev] has been incremented by the
+        // time we get here, so the just-updated level is istep[lev]%2.
+        const int tke_nnew = istep[lev] % 2;
+        copy_ak_to_cc("tke", *vec_tke[lev], tke_nnew);
+        copy_ak_to_cc("gls", *vec_gls[lev], tke_nnew);
+
         // Define standard process for calling the functions in Derive.cpp
         auto calculate_derived = [&](const std::string& der_name,
                                      decltype(derived::remora_dernull)& der_function)
