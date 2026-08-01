@@ -299,20 +299,17 @@ void NCTimeSeries::read_in_at_time (amrex::MultiFab* mf, int itime) {
     // -- applies the varinfo scale to the snapshot AT READ, before it is ever
     // time-interpolated, and to every point of the buffer including the
     // boundary row. Scale the grown box, not just the valid region.
+    //
+    // MultiFab::mult rather than a hand-rolled ParallelFor for two reasons.
+    // nvcc rejects an extended __device__ lambda whose enclosing function has
+    // private access within its class, which this one does. And the whole
+    // point of this block is the GHOST COUNT: the bug being fixed was a
+    // `mult(0.01)` that took the default nghost=0 and left the ring outside
+    // the physical domain unconverted. Passing nGrowVect() explicitly puts
+    // that argument where it cannot be dropped by accident again.
+    //
     if (scale != amrex::Real(1.0)) {
-        const amrex::Real s = scale;
-#ifdef AMREX_USE_OMP
-#pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
-#endif
-        for ( amrex::MFIter mfi(*mf, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi )
-        {
-            const amrex::Box gbx = mfi.growntilebox();
-            amrex::Array4<amrex::Real> arr = mf->array(mfi);
-            amrex::ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
-            {
-                arr(i,j,k) = s * arr(i,j,k);
-            });
-        }
+        mf->mult(scale, 0, mf->nComp(), mf->nGrowVect());
     }
 }
 #endif // REMORA_USE_NETCDF
