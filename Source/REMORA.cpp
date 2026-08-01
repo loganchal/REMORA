@@ -1580,8 +1580,16 @@ REMORA::init_only (int lev, Real time)
             Pair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::SWrad] == BulkForcingType::netcdf) {
-            srflx_data_from_file.reset(new NCTimeSeries(nc_frc_file, "swrad", frc_time_for(frc_srf_time_varname), geom[lev].Domain(),vec_srflx[lev].get(), true, false));
+            // ROMS's varinfo.dat gives swrad the scale 1.0, but inp_par.F:1109
+            // then does `cff=1.0_r8/(rho0*Cp); Fscale(idSrad,ng)=cff*Fscale(...)`,
+            // and nf_fread2d applies the result to each snapshot AS IT IS READ.
+            // ROMS therefore forms fac1*(cff*S1)+fac2*(cff*S2); scaling the
+            // interpolant instead computes cff*(fac1*S1+fac2*S2), a different
+            // tree. Same defect class as the Qair scale.
+            srflx_data_from_file.reset(new NCTimeSeries(nc_frc_file, "swrad", frc_time_for(frc_srf_time_varname), geom[lev].Domain(),vec_srflx[lev].get(), true, false,
+                                                       amrex::Real(1.0)/(solverChoice.rho0*Cp)));
             srflx_data_from_file->Initialize();
+            srflx_is_kinematic = true;
         }
         if (bulk_flux_type[BulkFlux::Rain] == BulkForcingType::netcdf) {
             rain_data_from_file.reset(new NCTimeSeries(nc_frc_file, "rain", frc_time_for(frc_rain_time_varname), geom[lev].Domain(),vec_rain[lev].get(), true, false));
@@ -1596,9 +1604,15 @@ REMORA::init_only (int lev, Real time)
             EminusP_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::LWrad] == BulkForcingType::netcdf) {
+            // inp_par.F:1113 scales Fscale(idLdwn) by 1/(rho0*Cp) exactly as it
+            // does swrad, so FORCES%lrflx is kinematic on arrival and
+            // bulk_flux.f90:363 multiplies it back by rho0*Cp. Reproduce both
+            // halves: x*(1/(rho0*Cp))*(rho0*Cp) is not x.
             longwave_down_data_from_file.reset(new NCTimeSeries(nc_frc_file, solverChoice.longwave_netcdf_varname, frc_time_for(frc_lrf_time_varname),
-                                                                geom[lev].Domain(), vec_longwave_down[lev].get(), true, false));
+                                                                geom[lev].Domain(), vec_longwave_down[lev].get(), true, false,
+                                                                amrex::Real(1.0)/(solverChoice.rho0*Cp)));
             longwave_down_data_from_file->Initialize();
+            lwrad_is_kinematic = true;
         }
     } else {
         if (bulk_flux_type[BulkFlux::Uwind] == BulkForcingType::netcdf) {

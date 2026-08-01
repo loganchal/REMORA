@@ -247,7 +247,14 @@ REMORA::WritePlotFile (int istep_for_plot)
             if (!solverChoice.bulk_fluxes && !solverChoice.atm2ocn_flux_mode) {
                 amrex::Abort("Attempting to write shortwave radiation flux to plotfile. Variable not allocated when bulk_fluxes turned off");
             }
-            for (int lev = 0; lev <= finest_level; ++lev) { MultiFab::Copy(mf_2d_rho[lev],*vec_srflx[lev],0,icomp_rho,1,0); }
+            // vec_srflx is kinematic (degC m/s) when read from netCDF, W/m2
+            // otherwise; write W/m2 in both cases.
+            for (int lev = 0; lev <= finest_level; ++lev) {
+                MultiFab::Copy(mf_2d_rho[lev],*vec_srflx[lev],0,icomp_rho,1,0);
+                if (srflx_is_kinematic) {
+                    mf_2d_rho[lev].mult(solverChoice.rho0 * Cp, icomp_rho, 1, 0);
+                }
+            }
             icomp_rho++;
         }
         if (plot_name == "shflux" ) {
