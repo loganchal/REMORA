@@ -441,6 +441,25 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(0) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x-fz_off,j,k,0) + tide_zeta_val;
+                        // NOT off by one, and NOT an unfaithful mirror of the
+                        // west. `domain` was converted to this variable's
+                        // nodality at the top of this function, so for ubar
+                        // (x-face) dom_hi.x is 395 while the CELL-centred upper
+                        // bound dhi.x is 394. h_arr/zeta_arr are cell-centred,
+                        // so (dom_hi.x-1, dom_hi.x) indexes cells (394, 395) =
+                        // (dhi.x, dhi.x+1) = ROMS (Iend, Iend+1),
+                        // u2dbc_im.f90:437-440. Correct as written.
+                        //
+                        // lbound does NOT shift under that conversion but ubound
+                        // DOES, which is the whole reason the low- and high-side
+                        // expressions look asymmetric while naming the right
+                        // pair on both sides. Rewriting this to the
+                        // "symmetric-looking" (dom_hi.x, dom_hi.x+1) reads two
+                        // cells past the last interior column, into ghost h and
+                        // zeta that are not ROMS's rho 396. That was MEASURED:
+                        // arm 5577150 returned 4.3e7 m3 of volume error at step
+                        // 1, twelve orders worse than the 5.0e-05 it replaced.
+                        // Do not "fix" this again.
                         const int ia = dom_hi.x-1-fh_off, ib = dom_hi.x-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
                                                      + h_arr(ib,j,0) + zeta_arr(ib,j,0,icomp_calc)));
@@ -603,6 +622,25 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(1) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y-fz_off,k,0) + tide_zeta_val;
+                        // NOT off by one, and NOT an unfaithful mirror of the
+                        // west. `domain` was converted to this variable's
+                        // nodality at the top of this function, so for vbar
+                        // (y-face) dom_hi.y is 465 while the CELL-centred upper
+                        // bound dhi.y is 464. h_arr/zeta_arr are cell-centred,
+                        // so (dom_hi.y-1, dom_hi.y) indexes cells (464, 465) =
+                        // (dhi.y, dhi.y+1) = ROMS (Jend, Jend+1),
+                        // v2dbc_im.f90, north branch. Correct as written.
+                        //
+                        // lbound does NOT shift under that conversion but ubound
+                        // DOES, which is the whole reason the low- and high-side
+                        // expressions look asymmetric while naming the right
+                        // pair on both sides. Rewriting this to the
+                        // "symmetric-looking" (dom_hi.y, dom_hi.y+1) reads two
+                        // cells past the last interior row, into ghost h and
+                        // zeta that are not ROMS's rho 466. That was MEASURED:
+                        // arm 5577150 returned 4.3e7 m3 of volume error at step
+                        // 1, twelve orders worse than the 5.0e-05 it replaced.
+                        // Do not "fix" this again.
                         const int ja = dom_hi.y-1-fh_off, jb = dom_hi.y-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
                                                      + h_arr(i,jb,0) + zeta_arr(i,jb,0,icomp_calc)));
