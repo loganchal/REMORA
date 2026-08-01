@@ -82,6 +82,8 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
 
         Real Hscale = solverChoice.rho0 * Cp;
         Real Hscale2 = one / (solverChoice.rho0 * Cp);
+        // ROMS bulk_flux.f90:640 `cff=1.0_r8/rhow`, hoisted out of the loop.
+        Real one_over_rhow = one / rhow;
         Real blk_ZQ = solverChoice.blk_ZQ;
         Real blk_ZT = solverChoice.blk_ZT;
         Real blk_ZW = solverChoice.blk_ZW;
@@ -357,9 +359,14 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
 
             //  Compute sensible heat flux (W/m2) due to rainfall (kg/m2/s), Hsr.
             Real diffw=Real(2.11e-5)*std::pow(TairK/Real(273.16),Real(1.94));
+            // ROMS bulk_flux.f90:574-576 divides by (rhoAir*blk_Cpa) with no
+            // guard. The 1e-20 that was here is a no-op at rhoAir*blk_Cpa ~
+            // 1.2e3 (it is 24 orders below the ulp), but bit-identity admits
+            // no extra terms and it would bite if the denominator ever went
+            // small.
             Real diffh=Real(0.02411)*(one+TairC*
                                (Real(3.309e-3)-Real(1.44e-6)*TairC))/
-                               (rhoAir*blk_Cpa+eps);
+                               (rhoAir*blk_Cpa);
             cff=Qair*Hlv/(blk_Rgas*TairK*TairK);
             Real wet_bulb=one/(one+Real(0.622)*(cff*Hlv*diffw)/
                                                   (blk_Cpa*diffh));
@@ -423,18 +430,28 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             //  ocean. It is  multiplied by surface salinity when computing state
             //  variable stflx(:,:,isalt) in "set_vbc.F".
 
-//            Real one_over_rhow=one/rhow;
             lrflx(i,j,0) = LRad*Hscale2;
             lhflx(i,j,0) = -LHeat*Hscale2;
             shflx(i,j,0) = -SHeat*Hscale2;
             // Note: srflx from NetCDF is in W/m², convert to degC m/s by multiplying by Hscale2
             stflux(i,j,0,Temp_comp)=(srflux*Hscale2 + lrflx(i,j,0) + lhflx(i,j,0) + shflx(i,j,0)) * mskr(i,j,0);
-            evap(i,j,0) = (LHeat / Hlv+eps) * mskr(i,j,0);
+            // ROMS bulk_flux.f90:649 is a bare `evap(i,j)=LHeat(i,j)/Hlv(i,j)`.
+            // The 1e-20 that used to be added here is an extra term: evap is
+            // O(4e-05), whose ulp is 7e-21, so the guard moved the value by
+            // one to two ulp on essentially every ocean cell (and more on the
+            // small-evaporation tail). Same reasoning as the Qsea and Wmag
+            // guards removed above.
+            evap(i,j,0) = (LHeat / Hlv) * mskr(i,j,0);
             if (use_EminusP_from_input) {
                 // Use prescribed E-P directly
                 stflux(i,j,0,Salt_comp) = mskr(i,j,0) * EminusP(i,j,0);
             } else {
-                stflux(i,j,0,Salt_comp) = mskr(i,j,0) * (evap(i,j,0)-rain(i,j,0)) / rhow;
+                // ROMS bulk_flux.f90:640,651 hoists `cff=1.0_r8/rhow` out of the
+                // loop and MULTIPLIES: stflux = cff*(evap-rain). Dividing by rhow
+                // instead is a different operation -- 1/1000 is not exact in
+                // binary -- and the two disagree by 1 ulp on ~13% of values.
+                stflux(i,j,0,Salt_comp) = (one_over_rhow * (evap(i,j,0)-rain(i,j,0)))
+                                        * mskr(i,j,0);
             }
         });
 
