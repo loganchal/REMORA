@@ -1311,10 +1311,46 @@ REMORA::set_surface_state (int lev)
         update_from_netcdf(Tair_data_from_file, vec_Tair);
     }
     if (bulk_flux_type[BulkFlux::Qair] == BulkForcingType::netcdf && !driver_atmos_state_from_driver[AtmosState::Qair]) {
+        // The percent -> fraction conversion used to be a
+        //     vec_qair[lev]->mult(0.01);
+        // right here. Two defects, one of them large.
+        //
+        //  1. amrex::MultiFab::mult(Real) defaults to nghost=0, so it scaled
+        //     the VALID region only. FillBoundary repairs inter-box ghosts by
+        //     copying scaled valid data, but the ghost ring that lies OUTSIDE
+        //     the physical domain is covered by no valid region and was left in
+        //     percent. That ring is exactly ROMS's rho row 0 / row Lm+1 (REMORA
+        //     cell i is ROMS rho i+1), and bulk_fluxes evaluates over the
+        //     tilebox grown by NGROW, so it reads it. ROMS bulk_flux.f90:408
+        //     branches on `IF (RH.lt.2.0)`: a fraction takes the Teten
+        //     vapour-pressure path, anything larger is taken to be specific
+        //     humidity in g/kg and divided by 1000. Moana Qair is 32.6..110 %,
+        //     so the whole unscaled rim took the WRONG BRANCH.
+        //
+        //     Measured on arm 5576669 record 1, port median by distance from
+        //     the domain edge -- this is the port's own output, no ROMS
+        //     comparison needed to see that it is wrong:
+        //
+        //       Qsp     0.0772 kg/kg at the rim vs 0.00716 one cell in (10.8x,
+        //               and impossible: saturation at the rim's 12.2 C is
+        //               about 0.0088 kg/kg)
+        //       qnet    +2110.8 W/m2 at the rim vs -49.99 one cell in
+        //       latent  +2072.9 W/m2 vs -73.47, i.e. sign-flipped
+        //       evap    -8.40e-04 vs +2.97e-05, also sign-flipped
+        //
+        //     2100 W/m2 into the outermost ring every step is what put `temp`
+        //     1.07e-08 K off the ROMS floor at baroclinic step 1, which then
+        //     reached `u` at step 2 and `ubar`/`zeta` at step 3.
+        //
+        //  2. Even where it was applied, it was applied to the INTERPOLANT.
+        //     ROMS applies Fscale inside nf_fread2d, i.e. per snapshot before
+        //     interpolation, so ROMS computes fac1*(0.01*Q1)+fac2*(0.01*Q2)
+        //     and this computed 0.01*(fac1*Q1+fac2*Q2). Different tree: 48.8%
+        //     of cells differ, up to 3 ulp.
+        //
+        // Both are fixed by handing the scale to NCTimeSeries, which applies it
+        // where ROMS does -- at the read, to the region the read refreshed.
         update_from_netcdf(qair_data_from_file, vec_qair);
-        if (solverChoice.qair_is_percent) {
-            vec_qair[lev]->mult(amrex::Real(0.01));
-        }
     }
     if (bulk_flux_type[BulkFlux::Pair] == BulkForcingType::netcdf && !driver_atmos_state_from_driver[AtmosState::Pair]) {
         update_from_netcdf(Pair_data_from_file, vec_Pair);
@@ -1538,7 +1574,14 @@ REMORA::init_only (int lev, Real time)
             Tair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Qair] == BulkForcingType::netcdf) {
-            qair_data_from_file.reset(new NCTimeSeries(nc_frc_file, qair_netcdf_varname, frc_time_for(frc_qair_time_varname), geom[lev].Domain(),vec_qair[lev].get(), true, false));
+            // ROMS's varinfo.dat gives Qair the scale 0.01 (percent -> fraction)
+            // and nf_fread2d applies it to each snapshot as it is read. Passing
+            // it here rather than scaling the interpolant afterwards is not
+            // cosmetic; see the comment at the deleted mult() in
+            // REMORA::set_surface_state.
+            const amrex::Real qair_scale = solverChoice.qair_is_percent ? amrex::Real(0.01)
+                                                                       : amrex::Real(1.0);
+            qair_data_from_file.reset(new NCTimeSeries(nc_frc_file, qair_netcdf_varname, frc_time_for(frc_qair_time_varname), geom[lev].Domain(),vec_qair[lev].get(), true, false, qair_scale));
             qair_data_from_file->Initialize();
         }
         if (bulk_flux_type[BulkFlux::Pair] == BulkForcingType::netcdf) {

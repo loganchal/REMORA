@@ -19,11 +19,13 @@
  * @param[inout] a_mf_var             MultiFab of data to either store into or reference for dimensions
  * @param[in   ] a_is2d               Whether the variable we're working with is 2D
  * @param[in   ] a_save_interpolated  Whether the interpolated value should be saved internally
+ * @param[in   ] a_scale              ROMS `Fscale`, applied to each snapshot as it is read
  */
 NCTimeSeries::NCTimeSeries (const amrex::Vector<std::string>& a_file_names, const std::string a_field_name,
                             const std::string a_time_name,
                             const amrex::Box& a_domain,
-                            amrex::MultiFab* a_mf_var, bool a_is2d, bool a_save_interpolated) {
+                            amrex::MultiFab* a_mf_var, bool a_is2d, bool a_save_interpolated,
+                            amrex::Real a_scale) {
     file_names.assign(a_file_names.begin(), a_file_names.end());
     time_name = a_time_name;
     field_name = a_field_name;
@@ -31,6 +33,7 @@ NCTimeSeries::NCTimeSeries (const amrex::Vector<std::string>& a_file_names, cons
     mf_var = a_mf_var;
     is2d = a_is2d;
     save_interpolated = a_save_interpolated;
+    scale = a_scale;
 }
 
 void NCTimeSeries::Initialize() {
@@ -289,6 +292,47 @@ void NCTimeSeries::read_in_at_time (amrex::MultiFab* mf, int itime) {
         // This only works here because we have broadcast the FArrayBox of data from the netcdf file to all ranks
 
         fab.template    copy<amrex::RunOn::Device>(NC_fab);
+
+        // ROMS applies the varinfo scale AT READ, per snapshot, to every point
+        // of the buffer including the boundary row:
+        // `wrk(i) = Ascl*(Afactor*wrk(i)+Aoffset)` (nf_fread2d.F:348/478/899).
+        //
+        // Applying it after the time interpolation instead, as
+        // `mf->mult(scale)`, gets two things wrong. It forms
+        // `s*(fac1*Q1+fac2*Q2)` where ROMS forms `fac1*(s*Q1)+fac2*(s*Q2)`,
+        // and -- much worse -- `MultiFab::mult` defaults to `nghost=0`, so the
+        // ghost ring OUTSIDE the physical domain is never scaled. That ring is
+        // ROMS's rho row 0 / Lm+1, `bulk_flux` reads it, and ROMS branches on
+        // `IF (RH.lt.2.0)` (bulk_flux.f90:408): a fraction takes the Teten
+        // vapour-pressure path, anything larger is read as g/kg. Moana `Qair`
+        // is 32.6-110 %, so the whole unscaled rim took the specific-humidity
+        // branch. Measured on arm 5576669 record 1, port median by distance
+        // from the domain edge:
+        //
+        //   Qsp   0.0772 kg/kg at the rim against 0.00716 one cell in (10.8x,
+        //         and physically impossible -- saturation at the rim's 12.2 C
+        //         is ~0.0088)
+        //   qnet  +2110.8 W/m2 at the rim against -49.99 one cell in
+        //   latent +2072.9 W/m2 against -73.47, i.e. sign-flipped
+        //
+        // The scale must therefore be applied HERE, at the read. It must NOT
+        // be applied to the whole grown box: `fab.copy(NC_fab)` refreshes only
+        // the intersection with `NC_fab.box()`, so ghosts outside that keep
+        // their previous, already-scaled value and would be scaled AGAIN on
+        // every re-read, compounding as `scale^n`. An earlier version of this
+        // fix did exactly that and had to be reverted. Scale the intersection,
+        // which is precisely what this read refreshed.
+        if (scale != amrex::Real(1.0)) {
+            const amrex::Real s = scale;
+            const amrex::Box  sbx = fab.box() & NC_fab.box();
+            if (sbx.ok()) {
+                amrex::Array4<amrex::Real> arr = fab.array();
+                amrex::ParallelFor(sbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+                {
+                    arr(i,j,k) = s * arr(i,j,k);
+                });
+            }
+        }
     } // mf
     } // omp
 }
