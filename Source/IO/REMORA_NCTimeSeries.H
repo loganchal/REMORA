@@ -22,7 +22,8 @@ class NCTimeSeries
                       const std::string a_time_name,
                       const amrex::Box& a_domain,
                       amrex::MultiFab* a_mf_var,
-                      bool a_is2d, bool a_save_interpolated);
+                      bool a_is2d, bool a_save_interpolated,
+                      amrex::Real a_scale = amrex::Real(1.0));
 
         /** \brief Read in time array from file and allocate data arrays */
         void Initialize ();
@@ -51,6 +52,15 @@ class NCTimeSeries
         std::string time_name;
         /// Domain
         amrex::Box domain;
+        /** ROMS's per-field `Fscale` (varinfo.dat scale, possibly further
+         * folded in inp_par.F). ROMS applies it inside nf_fread2d, i.e. to
+         * EACH SNAPSHOT AS IT IS READ and before any time interpolation --
+         * `wrk(i) = Ascl*(Afactor*wrk(i)+Aoffset)` (nf_fread2d.F:348/478/899).
+         * Doing it here rather than after the interpolation matters twice:
+         * the expression tree differs (fac1*(c*F1)+fac2*(c*F2) is not
+         * c*(fac1*F1+fac2*F2)), and a post-hoc MultiFab::mult scales only the
+         * valid region, silently leaving the ghost ring unconverted. */
+        amrex::Real scale;
 
         /// Whether the field we're reading in is 2d
         bool is2d;

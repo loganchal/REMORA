@@ -19,11 +19,13 @@
  * @param[inout] a_mf_var             MultiFab of data to either store into or reference for dimensions
  * @param[in   ] a_is2d               Whether the variable we're working with is 2D
  * @param[in   ] a_save_interpolated  Whether the interpolated value should be saved internally
+ * @param[in   ] a_scale              ROMS `Fscale` applied to each snapshot as it is read
  */
 NCTimeSeries::NCTimeSeries (const amrex::Vector<std::string>& a_file_names, const std::string a_field_name,
                             const std::string a_time_name,
                             const amrex::Box& a_domain,
-                            amrex::MultiFab* a_mf_var, bool a_is2d, bool a_save_interpolated) {
+                            amrex::MultiFab* a_mf_var, bool a_is2d, bool a_save_interpolated,
+                            amrex::Real a_scale) {
     file_names.assign(a_file_names.begin(), a_file_names.end());
     time_name = a_time_name;
     field_name = a_field_name;
@@ -31,6 +33,7 @@ NCTimeSeries::NCTimeSeries (const amrex::Vector<std::string>& a_file_names, cons
     mf_var = a_mf_var;
     is2d = a_is2d;
     save_interpolated = a_save_interpolated;
+    scale = a_scale;
 }
 
 void NCTimeSeries::Initialize() {
@@ -291,5 +294,25 @@ void NCTimeSeries::read_in_at_time (amrex::MultiFab* mf, int itime) {
         fab.template    copy<amrex::RunOn::Device>(NC_fab);
     } // mf
     } // omp
+
+    // ROMS nf_fread2d.F:348/478/899 -- `wrk(i) = Ascl*(Afactor*wrk(i)+Aoffset)`
+    // -- applies the varinfo scale to the snapshot AT READ, before it is ever
+    // time-interpolated, and to every point of the buffer including the
+    // boundary row. Scale the grown box, not just the valid region.
+    if (scale != amrex::Real(1.0)) {
+        const amrex::Real s = scale;
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
+#endif
+        for ( amrex::MFIter mfi(*mf, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi )
+        {
+            const amrex::Box gbx = mfi.growntilebox();
+            amrex::Array4<amrex::Real> arr = mf->array(mfi);
+            amrex::ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+            {
+                arr(i,j,k) = s * arr(i,j,k);
+            });
+        }
+    }
 }
 #endif // REMORA_USE_NETCDF
