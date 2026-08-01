@@ -309,7 +309,12 @@ void NCTimeSeries::read_in_at_time (amrex::MultiFab* mf, int itime) {
     // that argument where it cannot be dropped by accident again.
     //
     if (scale != amrex::Real(1.0)) {
-        mf->mult(scale, 0, mf->nComp(), mf->nGrowVect());
+        // nghost is an int here, not an IntVect. These MultiFabs are grown
+        // equally in x and y (and are slabs in z), so nGrow(0) is the whole
+        // ring; asserting that rather than assuming it, because the entire
+        // point of this call is that the ghost region gets scaled.
+        AMREX_ALWAYS_ASSERT(mf->nGrow(0) == mf->nGrow(1));
+        mf->mult(scale, 0, mf->nComp(), mf->nGrow(0));
     }
 }
 #endif // REMORA_USE_NETCDF
