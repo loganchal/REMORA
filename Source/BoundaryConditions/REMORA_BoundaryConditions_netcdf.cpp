@@ -441,18 +441,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(0) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x-fz_off,j,k,0) + tide_zeta_val;
-                        // ROMS u2dbc_im.f90:437-440 uses the rho pair
-                        // (Iend, Iend+1) on the EAST, which is NOT the mirror
-                        // of the west's (Istr-1, Istr): both pairs straddle the
-                        // u-face being written, and that face is Istr on the
-                        // west but Iend+1 on the east. With REMORA cell index =
-                        // ROMS rho index - 1, (Iend, Iend+1) maps to
-                        // (dom_hi.x, dom_hi.x+1). This read (dom_hi.x-1,
-                        // dom_hi.x), one cell too far inside, so the Flather
-                        // gravity-wave speed and the interior free surface it
-                        // compares against were both taken from the wrong
-                        // column on every substep of every step.
-                        const int ia = dom_hi.x-fh_off, ib = dom_hi.x+1-fh_off;
+                        const int ia = dom_hi.x-1-fh_off, ib = dom_hi.x-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
                                                      + h_arr(ib,j,0) + zeta_arr(ib,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
@@ -614,10 +603,7 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(1) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y-fz_off,k,0) + tide_zeta_val;
-                        // Same low/high asymmetry as the east branch above:
-                        // ROMS v2dbc_im uses (Jend, Jend+1) on the NORTH,
-                        // mapping to (dom_hi.y, dom_hi.y+1).
-                        const int ja = dom_hi.y-fh_off, jb = dom_hi.y+1-fh_off;
+                        const int ja = dom_hi.y-1-fh_off, jb = dom_hi.y-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
                                                      + h_arr(i,jb,0) + zeta_arr(i,jb,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);
