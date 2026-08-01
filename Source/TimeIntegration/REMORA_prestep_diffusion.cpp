@@ -86,13 +86,9 @@ REMORA::prestep_diffusion (const Box& vel_bx, const Box& gbx,
     // Shortwave penetration (ROMS SOLAR_SOURCE, pre_step3d.F + lmd_swfrac.F):
     // add dt*srflx*swdk at every interior W-face, where swdk is the
     // Paulson & Simpson (1977) two-band decay for the Jerlov water type.
-    // ROMS's srflx is kinematic (degC m/s), scaled by 1/(rho0*Cp) at READ time
-    // (Fscale(idSrad), inp_par.F:1112). REMORA now reads it the same way, in
-    // which case srflx_to_kin is exactly 1.0 and this reduces to ROMS's
-    //   FC(i,k)=FC(i,k)+dt(ng)*srflx(i,j)*swdk(i,j,k)      (pre_step3d.f90:735)
-    // term for term. Analytic/coupled srflx is still W/m2 and keeps the
-    // 1/(rho0*Cp) here. The surface face (below) carries the full stflx, so
-    // the top cell absorbs srflx*(1-swdk(N)).
+    // ROMS's srflx is kinematic (degC m/s); REMORA's srflx MultiFab is W/m2,
+    // so the 1/(rho0*Cp) scale is applied here. The surface face (below)
+    // carries the full stflx, so the top cell absorbs srflx*(1-swdk(N)).
     if (solar_source) {
         static constexpr Real lmd_mu1[9] = {0.35, 0.6, 1.0, 1.5, 1.4,
                                             0.42, 0.37, 0.33, 0.00468592};
@@ -105,14 +101,14 @@ REMORA::prestep_diffusion (const Box& vel_bx, const Box& gbx,
         const Real fac1 = -one/lmd_mu1[jwt];
         const Real fac2 = -one/lmd_mu2[jwt];
         const Real fac3 = lmd_r1[jwt];
-        const Real srflx_to_kin = srflx_is_kinematic ? one : one/(solverChoice.rho0*Cp);
+        const Real Hscale2 = one/(solverChoice.rho0*Cp);
         ParallelFor(grow(surroundingNodes(vel_bx,2),IntVect(0,0,-1)),
         [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
             Real zdep = z_w(i,j,N+1) - z_w(i,j,k);
             Real swdk = std::exp(zdep*fac1)*fac3 +
                         std::exp(zdep*fac2)*(one-fac3);
-            FC(i,j,k) += dt_lev*(srflx(i,j,0)*srflx_to_kin)*swdk;
+            FC(i,j,k) += dt_lev*(srflx(i,j,0)*Hscale2)*swdk;
         });
     }
 

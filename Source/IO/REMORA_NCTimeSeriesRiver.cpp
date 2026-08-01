@@ -182,19 +182,9 @@ void NCTimeSeriesRiver::update_interpolated_to_time (amrex::Real time) {
     auto interp_array = fab_interp->array();
     auto before_array = fab_before->array();
     auto after_array = fab_after->array();
-    if (has_z || use_vert_integ) {
-        amrex::ParallelFor(fab_domain, [=] AMREX_GPU_DEVICE (int r, int , int k) {
-            interp_array(r,0,k) = fac1*before_array(r,0,k) + fac2*after_array(r,0,k);
-        });
-    } else {
-        // ROMS set_data.F:189-193: Qsrc(i,k) = Qbar(i)*Qshape(i,k), with Qbar
-        // the already-time-interpolated transport. See read_in_at_time.
-        auto array_vshape = fab_vshape->const_array();
-        amrex::ParallelFor(fab_domain, [=] AMREX_GPU_DEVICE (int r, int , int k) {
-            interp_array(r,0,k) = (fac1*before_array(r,0,k) + fac2*after_array(r,0,k))
-                                * array_vshape(r,0,k);
-        });
-    }
+    amrex::ParallelFor(fab_domain, [=] AMREX_GPU_DEVICE (int r, int , int k) {
+        interp_array(r,0,k) = fac1*before_array(r,0,k) + fac2*after_array(r,0,k);
+    });
 }
 
 void NCTimeSeriesRiver::read_in_at_time (amrex::FArrayBox* fab_dat, int itime) {
@@ -230,18 +220,9 @@ void NCTimeSeriesRiver::read_in_at_time (amrex::FArrayBox* fab_dat, int itime) {
             dat_array(r,0,k) = tmp_array(r,0,k);
         });
     } else {
-        // The river_Vshape multiply used to happen HERE, per snapshot, so the
-        // interpolant was fac1*(Qbar1*Vshape) + fac2*(Qbar2*Vshape). ROMS does
-        // it the other way round: set_data.F:183 time-interpolates the vertically
-        // integrated transport on its own, and only then
-        //     Qsrc(i,k) = Qbar(i)*Qshape(i,k)                (set_data.F:191)
-        // i.e. (fac1*Qbar1 + fac2*Qbar2)*Vshape. Algebraically identical, a
-        // different expression tree, and not a wash: on nz5km_N50_rivers_ext.nc
-        // at the Moana step-1 bracket the two forms disagree on up to 53.9% of
-        // the non-zero (river, level) entries, by up to 2 ulp (2.9e-16 relative).
-        // The multiply now lives in update_interpolated_to_time.
+        auto array_vshape = fab_vshape->const_array();
         amrex::ParallelFor(fab_domain, [=] AMREX_GPU_DEVICE (int r, int , int k) {
-            dat_array(r,0,k) = tmp_array(r,0,0);
+            dat_array(r,0,k) = tmp_array(r,0,0) * array_vshape(r,0,k);
         });
     }
 }

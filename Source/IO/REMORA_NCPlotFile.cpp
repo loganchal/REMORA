@@ -1309,17 +1309,12 @@ void REMORA::WriteNCPlotFile_which(int lev, int which_subdomain, MultiFab const*
                             { local_start_nt, local_start_y, local_start_x },
                             { local_nt,       local_ny,       local_nx });
                 }
-                // swrad. Stored KINEMATIC (degC m/s) when read from netCDF --
-                // ROMS's Fscale(idSrad) carries 1/(rho0*Cp) -- and in W/m2 on
-                // the analytic/coupled paths. Write W/m2 either way, matching
-                // ROMS's history file.
+                // swrad, note this is stored explicitly as W/m², not degC m/s in REMORA.bulk_flux.cpp
                 {
                     FArrayBox tmp;
                     tmp.resize(tmp_bx_2d, 1, amrex::The_Pinned_Arena());
                     tmp.template copy<RunOn::Device>((*vec_srflx[lev])[mfi.index()], 0, 0, 1);
                     Gpu::streamSynchronize();
-
-                    if (srflx_is_kinematic) { tmp.mult<RunOn::Host>(Hscale); }
 
                     auto nc_var = ncf.var("swrad");
                     nc_var.put(tmp.dataPtr(),

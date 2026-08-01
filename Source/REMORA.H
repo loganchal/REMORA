@@ -1470,21 +1470,6 @@ private:
     /** \brief Data container for evaporation minus precipitation read from file */
     std::unique_ptr<NCTimeSeries> EminusP_data_from_file;
 
-    /** \brief True when vec_srflx holds KINEMATIC flux (degC m/s) rather than W/m2.
-     *
-     * ROMS folds 1/(rho0*Cp) into Fscale(idSrad) in inp_par.F:1109-1112 and
-     * applies it inside nf_fread2d, i.e. to each snapshot BEFORE the time
-     * interpolation, so FORCES%srflx is kinematic everywhere it is used
-     * (bulk_flux.F:646, pre_step3d.F:735). Set when swrad comes from netCDF;
-     * the analytic and coupled paths still deliver W/m2. */
-    bool srflx_is_kinematic = false;
-    /** \brief True when vec_longwave_down holds KINEMATIC flux (degC m/s).
-     *
-     * Same mechanism via Fscale(idLdwn). ROMS then multiplies back by rho0*Cp
-     * at bulk_flux.f90:363 -- that round trip is not the identity in floating
-     * point, so it has to be reproduced, not optimised away. */
-    bool lwrad_is_kinematic = false;
-
     /** \brief Data container for ubar climatology data read from file */
     std::unique_ptr<NCTimeSeries> ubar_clim_data_from_file;
     /** \brief Data container for vbar climatology data read from file */

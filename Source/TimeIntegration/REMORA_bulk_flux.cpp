@@ -82,17 +82,6 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
 
         Real Hscale = solverChoice.rho0 * Cp;
         Real Hscale2 = one / (solverChoice.rho0 * Cp);
-        // ROMS applies 1/(rho0*Cp) to swrad and lwrad_down at READ (Fscale,
-        // inp_par.F:1109-1113), so FORCES%srflx and %lrflx are already
-        // kinematic. When REMORA read them the same way these multipliers are
-        // exactly 1.0 and rho0*Cp, reproducing bulk_flux.f90:363 and :646
-        // term for term; on the analytic/coupled paths the MultiFabs are still
-        // W/m2 and the multipliers restore the old behaviour bit for bit
-        // (x*1.0 == x).
-        Real srflx_to_kin = srflx_is_kinematic ? one     : Hscale2;
-        Real lwrad_to_W   = lwrad_is_kinematic ? Hscale  : one;
-        // ROMS bulk_flux.f90:640 `cff=1.0_r8/rhow`, hoisted out of the loop.
-        Real one_over_rhow = one / rhow;
         Real blk_ZQ = solverChoice.blk_ZQ;
         Real blk_ZT = solverChoice.blk_ZT;
         Real blk_ZW = solverChoice.blk_ZW;
@@ -117,7 +106,7 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             Real TairK = TairC + Real(273.16); // Air temperature [K]
             Real Hair = qair_arr(i,j,0);   // Specific humidity [kg/kg] or RH [fraction]
             Real RH = Hair;
-            Real srflux = srflx_arr(i,j,0); // Shortwave radiation flux [degC m/s from file, else W/m2]
+            Real srflux = srflx_arr(i,j,0); // Shortwave radiation flux [W/m²]
             Real cloud = cloud_arr(i,j,0);  // Cloud cover fraction [0-1]
 
             // Input bulk parametrization fields
@@ -155,21 +144,13 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
                1.0 at poles to 0.5 at the Equator).
 
             */
-            // ROMS bulk_flux.F:471-488. All three branches assign LRad and then
-            // the SAME masking line runs for all of them (F:488).
             if (have_external_longwave && longwave_is_net) {
-                // ROMS bulk_flux.F:485  LRad(i,j)=lrflx(i,j)*Hscale
-                LRad = longwave_down_arr(i,j,0) * lwrad_to_W;
+                // External forcing provides net longwave directly (W/m2).
+                LRad = longwave_down_arr(i,j,0);
             } else if (have_external_longwave && use_longwave_down) {
-                // ROMS bulk_flux.f90:363-364, verbatim:
-                //   LRad = lrflx*Hscale - emmiss*StefBo*TseaK*TseaK*TseaK*TseaK
-                // Note the repeated multiply, NOT pow(TseaK,4): the two agree
-                // to at best 3 ulp. Measured over 2e5 sea temperatures in
-                // -2..30 degC, 50.7% of values differ, by up to 3 ulp
-                // (1.7e-13 W/m2 in Lemit, which is ~6 ulp of the O(50 W/m2)
-                // net that Lemit is differenced into).
-                LRad = longwave_down_arr(i,j,0) * lwrad_to_W
-                     - emmiss*StefBo*TseaK*TseaK*TseaK*TseaK;
+                Real Ldown = longwave_down_arr(i,j,0);
+                Real Lemit = emmiss * StefBo * std::pow(TseaK,4);
+                LRad = Ldown - Lemit;
             } else {
                 // Original Berliand parameterization
                 cff=(Real(0.7859)+Real(0.03477)*TairC)/(one+Real(0.00412)*TairC);
@@ -183,11 +164,6 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
                         (one-Real(0.6823)*cloud*cloud)+
                         cff2*Real(4.0)*(TseaK-TairK));
             }
-            // ROMS bulk_flux.F:488  LRad(i,j)=LRad(i,j)*rmask(i,j)
-            // The port dropped this. It only bites on land, where it leaves
-            // lrflx (a written diagnostic, and the initialiser of LHeat/SHeat
-            // on the next call) non-zero where ROMS has exactly zero.
-            LRad = LRad * mskr(i,j,0);
            /*
             -----------------------------------------------------------------------
               Compute specific humidities (kg/kg).
@@ -381,14 +357,9 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
 
             //  Compute sensible heat flux (W/m2) due to rainfall (kg/m2/s), Hsr.
             Real diffw=Real(2.11e-5)*std::pow(TairK/Real(273.16),Real(1.94));
-            // ROMS bulk_flux.f90:574-576 divides by (rhoAir*blk_Cpa) with no
-            // guard. The 1e-20 that was here is a no-op at rhoAir*blk_Cpa ~
-            // 1.2e3 (it is 24 orders below the ulp), but bit-identity admits
-            // no extra terms and it would bite if the denominator ever went
-            // small.
             Real diffh=Real(0.02411)*(one+TairC*
                                (Real(3.309e-3)-Real(1.44e-6)*TairC))/
-                               (rhoAir*blk_Cpa);
+                               (rhoAir*blk_Cpa+eps);
             cff=Qair*Hlv/(blk_Rgas*TairK*TairK);
             Real wet_bulb=one/(one+Real(0.622)*(cff*Hlv*diffw)/
                                                   (blk_Cpa*diffh));
@@ -452,32 +423,18 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
             //  ocean. It is  multiplied by surface salinity when computing state
             //  variable stflx(:,:,isalt) in "set_vbc.F".
 
+//            Real one_over_rhow=one/rhow;
             lrflx(i,j,0) = LRad*Hscale2;
             lhflx(i,j,0) = -LHeat*Hscale2;
             shflx(i,j,0) = -SHeat*Hscale2;
-            // ROMS bulk_flux.f90:646 sums four ALREADY-KINEMATIC terms:
-            //   stflux(itemp)=(srflx+lrflx+lhflx+shflx)
-            // srflx got its 1/(rho0*Cp) at read time, per snapshot. srflx_to_kin
-            // is exactly 1.0 on that path, so this is the ROMS tree; it is
-            // Hscale2 only where the field really did arrive in W/m2.
-            stflux(i,j,0,Temp_comp)=(srflux*srflx_to_kin + lrflx(i,j,0) + lhflx(i,j,0) + shflx(i,j,0)) * mskr(i,j,0);
-            // ROMS bulk_flux.f90:649 is a bare `evap(i,j)=LHeat(i,j)/Hlv(i,j)`.
-            // The 1e-20 that used to be added here is an extra term: evap is
-            // O(4e-05), whose ulp is 7e-21, so the guard moved the value by
-            // one to two ulp on essentially every ocean cell (and more on the
-            // small-evaporation tail). Same reasoning as the Qsea and Wmag
-            // guards removed above.
-            evap(i,j,0) = (LHeat / Hlv) * mskr(i,j,0);
+            // Note: srflx from NetCDF is in W/m², convert to degC m/s by multiplying by Hscale2
+            stflux(i,j,0,Temp_comp)=(srflux*Hscale2 + lrflx(i,j,0) + lhflx(i,j,0) + shflx(i,j,0)) * mskr(i,j,0);
+            evap(i,j,0) = (LHeat / Hlv+eps) * mskr(i,j,0);
             if (use_EminusP_from_input) {
                 // Use prescribed E-P directly
                 stflux(i,j,0,Salt_comp) = mskr(i,j,0) * EminusP(i,j,0);
             } else {
-                // ROMS bulk_flux.f90:640,651 hoists `cff=1.0_r8/rhow` out of the
-                // loop and MULTIPLIES: stflux = cff*(evap-rain). Dividing by rhow
-                // instead is a different operation -- 1/1000 is not exact in
-                // binary -- and the two disagree by 1 ulp on ~13% of values.
-                stflux(i,j,0,Salt_comp) = (one_over_rhow * (evap(i,j,0)-rain(i,j,0)))
-                                        * mskr(i,j,0);
+                stflux(i,j,0,Salt_comp) = mskr(i,j,0) * (evap(i,j,0)-rain(i,j,0)) / rhow;
             }
         });
 
