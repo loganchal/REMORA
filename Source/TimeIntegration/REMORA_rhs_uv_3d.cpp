@@ -247,20 +247,28 @@ REMORA::rhs_uv_3d (int lev,
     // entry.
     ParallelFor(makeSlab(xbx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int)
     {
-       Real acc = zero;
-       for (int k = 0; k <= N; ++k)
-       {
+       // ROMS rhs3d.f90:647-660 completes the WHOLE vertical sum first and only
+       // then adds the two stresses, surface before bottom:
+       //     rufrc = ru(1);  DO k=2,N: rufrc = rufrc + ru(k)
+       //     cff1 = sustr*cff;  cff2 = -bustr*cff
+       //     rufrc = rufrc + cff1 + cff2        ! ((S + cff1) + cff2)
+       // Injecting the bottom stress into the running total after k=0 instead,
+       // as this loop used to, reassociates a 52-term sum on every u face on
+       // every baroclinic step. rufrc is the entire baroclinic forcing of the
+       // barotropic momentum equation and is re-read at all 44 substeps, and the
+       // term that moved is largest in shallow water.
+       Real acc = ru(i,j,0,nrhs);
+       for (int k = 1; k <= N; ++k) {
           acc += ru(i,j,k,nrhs);
-
-          Real om_u = two / (pm(i-1,j,0)+pm(i,j,0));
-          Real on_u = two / (pn(i-1,j,0)+pn(i,j,0));
-          Real cff  = om_u * on_u;
-
-          Real cff1 = (k == N) ?  sustr(i,j,0)*cff : zero;
-          Real cff2 = (k == 0) ? -bustr(i,j,0)*cff : zero;
-
-          acc += cff1+cff2;
        }
+
+       Real om_u = two / (pm(i-1,j,0)+pm(i,j,0));
+       Real on_u = two / (pn(i-1,j,0)+pn(i,j,0));
+       Real cff  = om_u * on_u;
+
+       acc += sustr(i,j,0)*cff;
+       acc += -bustr(i,j,0)*cff;
+
        rufrc(i,j,0) = acc;
     });
 
@@ -407,20 +415,19 @@ REMORA::rhs_uv_3d (int lev,
     // Assign, not accumulate: see the note on rufrc above (rhs3d.F:1603).
     ParallelFor(makeSlab(ybx,2,0), [=] AMREX_GPU_DEVICE (int i, int j, int)
     {
-       Real acc = zero;
-       for (int k = 0; k <= N; ++k)
-       {
+       // ROMS rhs3d.f90:664-675, the exact twin of the rufrc ordering above.
+       Real acc = rv(i,j,0,nrhs);
+       for (int k = 1; k <= N; ++k) {
           acc += rv(i,j,k,nrhs);
-
-          Real om_v = two / (pm(i,j-1,0)+pm(i,j,0));
-          Real on_v = two / (pn(i,j-1,0)+pn(i,j,0));
-          Real cff = om_v * on_v;
-
-          Real cff1 = (k == N) ?  svstr(i,j,0)*cff : zero;
-          Real cff2 = (k == 0) ? -bvstr(i,j,0)*cff : zero;
-
-          acc += cff1+cff2;
        }
+
+       Real om_v = two / (pm(i,j-1,0)+pm(i,j,0));
+       Real on_v = two / (pn(i,j-1,0)+pn(i,j,0));
+       Real cff  = om_v * on_v;
+
+       acc += svstr(i,j,0)*cff;
+       acc += -bvstr(i,j,0)*cff;
+
        rvfrc(i,j,0) = acc;
     });
 }

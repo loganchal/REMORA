@@ -373,7 +373,15 @@ REMORA::advance_3d (int lev, MultiFab& mf_cons,
             //  The running sum is a serial dependence in k, so it must live
             //  inside one thread per column (the fused-index form raced on GPU).
             for (int k = 1; k <= N+1; ++k) {
-                W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)) - (Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
+                // ROMS omega.f90:186-188 subtracts ONE parenthesised expression:
+                //     W(k) = W(k-1) - (Huon(i+1)-Huon(i)+Hvom(j+1)-Hvom(j))
+                // which Fortran evaluates ((a-b)+c)-d. Splitting it into two
+                // subtractions, W - (a-b) - (c-d), is a different tree. It matters
+                // here more than a reassociation usually does: the divergence is a
+                // near-total cancellation of face fluxes of order 1e4 m3/s leaving a
+                // residual of order 1, so the two forms carry different absolute
+                // error and disagree by ~eps*|Huon| per level, accumulated over N.
+                W(i,j,k) = W(i,j,k-1) - (Huon(i+1,j,k-1)-Huon(i,j,k-1)+Hvom(i,j+1,k-1)-Hvom(i,j,k-1));
             }
         });
         ParallelFor(gbx1D, [=] AMREX_GPU_DEVICE (int i, int j, int )

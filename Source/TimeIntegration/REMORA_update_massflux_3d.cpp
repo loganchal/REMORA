@@ -96,7 +96,13 @@ REMORA::update_massflux_3d (int lev, const Box& bx,
             }
         }
 
-        for (int k=0; k<=N; k++) {
+        // DESCENDING in k, following ROMS step3d_uv.f90:596 (`DO k=N(ng),1,-1`)
+        // and its Hvom twin at :700. Hphi itself is k-local so its values do not
+        // depend on the direction, but FC is an N-term reduction and does. FC is
+        // then formed as (FC - Dphi_avg2), a near-cancellation, so the relative
+        // error in the correction is amplified well beyond the ulp of the sum,
+        // and that correction is applied to every level of Huon/Hvom.
+        for (int k=N; k>=0; k--) {
             Hphi(i,j,k) = Real(0.5) * (Hphi(i,j,k)+phi(i,j,k,nnew)*DC(i,j,k));
             FC(i,j,0)  += Hphi(i,j,k);
         } // k

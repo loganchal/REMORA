@@ -109,7 +109,9 @@ REMORA::uv3dmix  (const Box& xbx, const Box& ybx,
             const Real cff2=Real(0.5)*(pm(i-1,j,0)+pm(i,j,0))*(UFe(i,j+1,k)-UFe(i  ,j,k));
             const Real cff3=cff*(cff1+cff2);
             u(i,j,k,nnew)=u(i,j,k,nnew)+cff3;
-            rufrc(i,j,0) += cff1+cff2;
+            // ROMS uv3dmix.f90:279 is `rufrc = rufrc + cff1 + cff2`, i.e.
+            // ((R + cff1) + cff2). `R += cff1+cff2` sums the pair first.
+            rufrc(i,j,0) = rufrc(i,j,0) + cff1 + cff2;
         }
     });
 
@@ -166,7 +168,8 @@ REMORA::uv3dmix  (const Box& xbx, const Box& ybx,
             const Real cff3=cff*(cff1-cff2);
 
             v(i,j,k,nnew)=v(i,j,k,nnew)+cff3;
-            rvfrc(i,j,0) += cff1-cff2;
+            // ROMS uv3dmix.f90:289: ((R + cff1) - cff2).
+            rvfrc(i,j,0) = rvfrc(i,j,0) + cff1 - cff2;
         }
     });
 }

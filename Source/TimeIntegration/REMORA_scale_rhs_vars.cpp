@@ -5,6 +5,19 @@ using namespace amrex;
 void
 REMORA::scale_rhs_vars ()
 {
+    // These two routines are exact mathematical inverses that exist only so
+    // AMReX can interpolate ru/rv/ru2d/rv2d conservatively between levels. In
+    // floating point they are NOT inverses: cff is not a power of two, so a
+    // value round-tripped through them comes back as fl(fl(x*cff)/cff), which
+    // differs from x by an ulp in a large fraction of cells.
+    //
+    // ru/rv are recomputed from scratch every step so the round-trip is
+    // invisible there, but ru2d/rv2d are the AB3 memory of the 3-D forcing:
+    // what step n+1 reads is what step n wrote, perturbed. ROMS has no analogue,
+    // and the perturbation lands on nothing but the barotropic solution, once
+    // per baroclinic step, 26784 times a month. With a single level there is
+    // nothing to interpolate, so skip it.
+    if (finest_level == 0) return;
     for (int lev=0; lev<=finest_level;lev++) {
         MultiFab& mf_cons = *cons_new[lev];
 #ifdef _OPENMP
@@ -54,6 +67,19 @@ REMORA::scale_rhs_vars ()
 void
 REMORA::scale_rhs_vars_inv ()
 {
+    // These two routines are exact mathematical inverses that exist only so
+    // AMReX can interpolate ru/rv/ru2d/rv2d conservatively between levels. In
+    // floating point they are NOT inverses: cff is not a power of two, so a
+    // value round-tripped through them comes back as fl(fl(x*cff)/cff), which
+    // differs from x by an ulp in a large fraction of cells.
+    //
+    // ru/rv are recomputed from scratch every step so the round-trip is
+    // invisible there, but ru2d/rv2d are the AB3 memory of the 3-D forcing:
+    // what step n+1 reads is what step n wrote, perturbed. ROMS has no analogue,
+    // and the perturbation lands on nothing but the barotropic solution, once
+    // per baroclinic step, 26784 times a month. With a single level there is
+    // nothing to interpolate, so skip it.
+    if (finest_level == 0) return;
     for (int lev=0; lev<=finest_level;lev++) {
         MultiFab& mf_cons = *cons_new[lev];
 #ifdef _OPENMP

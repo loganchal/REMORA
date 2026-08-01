@@ -174,7 +174,15 @@ REMORA::stretch_transform (int lev)
                 Real cff2_w=(cff_w+cff1_w*hwater)*hinv;
 
                 if (k==0) {
-                    h(i,j,0,1) = Zt_avg1(i,j,0)+(Zt_avg1(i,j,0)+hwater)*cff2_w;
+                    // ROMS set_depth.f90:228 sets the bottom w-level to exactly
+                    // -h, outside the k loop, rather than evaluating the
+                    // stretching formula there. The formula is algebraically -h
+                    // because sc_w(0) = Cs_w(0) = -1, but two roundings break
+                    // it: over 2e6 random (h, Zt_avg1) pairs at hc=250 it
+                    // differs from -h in 13.4% of columns, by up to 9.1e-13 m.
+                    // That lands in Hz of the bottom cell, hence in Huon/Hvom at
+                    // k=0, hence in the omega divergence at every level above.
+                    h(i,j,0,1) = -hwater;
                     z_w(i,j,0) = h(i,j,0,1);
                 } else {
                     z_w(i,j,k)=Zt_avg1(i,j,0)+(Zt_avg1(i,j,0)+hwater)*cff2_w;
