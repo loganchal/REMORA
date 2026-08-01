@@ -151,7 +151,17 @@ REMORA::bulk_fluxes (int lev, MultiFab* mf_cons, MultiFab* mf_uwind, MultiFab* m
                 LRad = longwave_down_arr(i,j,0);
             } else if (have_external_longwave && use_longwave_down) {
                 Real Ldown = longwave_down_arr(i,j,0);
-                Real Lemit = emmiss * StefBo * std::pow(TseaK,4);
+                // ROMS bulk_flux.f90:363-364 writes the emitted term as a chain
+                // of multiplications, `emmiss*StefBo*TseaK*TseaK*TseaK*TseaK`,
+                // not as a power. std::pow(x,4) rounds once (glibc's pow is
+                // correctly rounded); the chain rounds three times, so the two
+                // differ by up to an ulp of a ~300 W/m2 quantity. This is the
+                // LIVE path for this configuration -- ROMS defines LONGWAVE_OUT
+                // and the deck sets remora.longwave_down=true -- so it is
+                // evaluated on every ocean cell on every step. `*` is
+                // left-associative in C++ as in Fortran, so written this way the
+                // two evaluate in the same order.
+                Real Lemit = emmiss * StefBo * TseaK * TseaK * TseaK * TseaK;
                 LRad = Ldown - Lemit;
             } else {
                 // Original Berliand parameterization
