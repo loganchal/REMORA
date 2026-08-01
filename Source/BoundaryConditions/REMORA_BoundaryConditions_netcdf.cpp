@@ -101,6 +101,18 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
     // the two rho cells straddling the u-face it writes; whether REMORA's
     // dom_lo.x-1 / dom_lo.x is that same pair depends on where the boundary data
     // box lands, which is measured rather than argued.
+    //
+    // SETTLED, by reading the oracle rather than scanning the knob: ROMS uses the
+    // two rho cells STRADDLING the face the branch writes, on every side --
+    // (Istr-1,Istr) west, (Jstr-1,Jstr) south, (Iend,Iend+1) east,
+    // (Jend,Jend+1) north (u2dbc_im.f90:686-691/902-905,
+    // v2dbc_im.f90 south/north Flather). With ROMS rho i mapping to REMORA cell
+    // i-1 those are (dom_lo.x-1,dom_lo.x), (dom_lo.y-1,dom_lo.y),
+    // (dom_hi.x,dom_hi.x+1) and (dom_hi.y,dom_hi.y+1). The two LOW sides were
+    // already right; both HIGH sides were one cell too far inside, which is why
+    // the open-boundary residual was east-dominant with a smaller northern
+    // component and nothing on the west or south. fh_off keeps its meaning
+    // (positive = inward on every side) and its default of zero is now ROMS.
     const int fh_off = solverChoice.flather_hz_ioff;
 
     // remora.flather_dump = K dumps the west Flather ingredients on call K (see
@@ -441,7 +453,12 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(0) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatxhi_zeta(lbound(xhi).x-fz_off,j,k,0) + tide_zeta_val;
-                        const int ia = dom_hi.x-1-fh_off, ib = dom_hi.x-fh_off;
+                        // u2dbc_im.f90:902-905 -- the two rho cells STRADDLING the
+                        // u-face this branch writes, which on the east are Iend and
+                        // Iend+1, i.e. dom_hi.x and dom_hi.x+1. This read
+                        // dom_hi.x-1 / dom_hi.x: one cell too far inside. See the
+                        // note on the west branch.
+                        const int ia = dom_hi.x-fh_off, ib = dom_hi.x+1-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(ia,j,0) + zeta_arr(ia,j,0,icomp_calc)
                                                      + h_arr(ib,j,0) + zeta_arr(ib,j,0,icomp_calc)));
                         Real Cx = std::sqrt(g * cff);
@@ -603,7 +620,11 @@ REMORA::fill_from_bdyfiles (int lev, MultiFab& mf_to_fill, const MultiFab& mf_ma
                         dest_arr(i,j,k,icomp+icomp_to_fill) = bry_val * mask_arr(i,j,0);
                     } else if (bcr.hi(1) == REMORABCType::flather) {
                         Real bry_val_zeta = bdatyhi_zeta(i,lbound(yhi).y-fz_off,k,0) + tide_zeta_val;
-                        const int ja = dom_hi.y-1-fh_off, jb = dom_hi.y-fh_off;
+                        // v2dbc_im.f90:north Flather -- the two rho cells STRADDLING
+                        // the v-face this branch writes, which on the north are Jend
+                        // and Jend+1, i.e. dom_hi.y and dom_hi.y+1. This read
+                        // dom_hi.y-1 / dom_hi.y: one cell too far inside.
+                        const int ja = dom_hi.y-fh_off, jb = dom_hi.y+1-fh_off;
                         Real cff = one / (Real(0.5) * (h_arr(i,ja,0) + zeta_arr(i,ja,0,icomp_calc)
                                                      + h_arr(i,jb,0) + zeta_arr(i,jb,0,icomp_calc)));
                         Real Ce = std::sqrt(g * cff);
