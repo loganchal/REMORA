@@ -1,6 +1,7 @@
 #include "REMORA_NCTimeSeriesBoundary.H"
 #include "REMORA_NCFile.H"
 #include "REMORA_TimeUnits.H"
+#include "REMORA_TimeInterp.H"
 
 #include "AMReX_ParallelDescriptor.H"
 
@@ -278,8 +279,11 @@ void NCTimeSeriesBoundary::update_interpolated_to_time (amrex::Real time)
         } // lev
     } // i_time
 
-    amrex::Real dt = time_after - time_before;
-    amrex::Real time_before_copy = time_before;
+    // ROMS set_ngfld.F:83-100. NOT the slope form; see REMORA_TimeInterp.H for
+    // why the expression tree has to match rather than merely agree in exact
+    // arithmetic. Captured by value into the device lambdas below.
+    amrex::Real fac1, fac2;
+    REMORATimeInterp::weights(time, time_before, time_after, fac1, fac2);
 
     amrex::Array4<amrex::Real> xlo_interp_arr = xlo_dat_interp.array();
     amrex::Array4<amrex::Real> xhi_interp_arr = xhi_dat_interp.array();
@@ -299,28 +303,28 @@ void NCTimeSeriesBoundary::update_interpolated_to_time (amrex::Real time)
     if (var_need_data[amrex::Orientation(amrex::Direction::x,amrex::Orientation::low)] == true) {
         amrex::ParallelFor(xlo_dat_interp.box(), [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            xlo_interp_arr(i,j,k) = xlo_before_arr(i,j,k) + (time - time_before_copy) * (xlo_after_arr(i,j,k) - xlo_before_arr(i,j,k)) / dt;
+            xlo_interp_arr(i,j,k) = fac1*xlo_before_arr(i,j,k) + fac2*xlo_after_arr(i,j,k);
         });
     }
 
     if (var_need_data[amrex::Orientation(amrex::Direction::x,amrex::Orientation::high)] == true) {
         amrex::ParallelFor(xhi_dat_interp.box(), [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            xhi_interp_arr(i,j,k) = xhi_before_arr(i,j,k) + (time - time_before_copy) * (xhi_after_arr(i,j,k) - xhi_before_arr(i,j,k)) / dt;
+            xhi_interp_arr(i,j,k) = fac1*xhi_before_arr(i,j,k) + fac2*xhi_after_arr(i,j,k);
         });
     }
 
     if (var_need_data[amrex::Orientation(amrex::Direction::y,amrex::Orientation::low)] == true) {
         amrex::ParallelFor(ylo_dat_interp.box(), [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            ylo_interp_arr(i,j,k) = ylo_before_arr(i,j,k) + (time - time_before_copy) * (ylo_after_arr(i,j,k) - ylo_before_arr(i,j,k)) / dt;
+            ylo_interp_arr(i,j,k) = fac1*ylo_before_arr(i,j,k) + fac2*ylo_after_arr(i,j,k);
         });
     }
 
     if (var_need_data[amrex::Orientation(amrex::Direction::y,amrex::Orientation::high)] == true) {
         amrex::ParallelFor(yhi_dat_interp.box(), [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            yhi_interp_arr(i,j,k) = yhi_before_arr(i,j,k) + (time - time_before_copy) * (yhi_after_arr(i,j,k) - yhi_before_arr(i,j,k)) / dt;
+            yhi_interp_arr(i,j,k) = fac1*yhi_before_arr(i,j,k) + fac2*yhi_after_arr(i,j,k);
         });
     }
 }

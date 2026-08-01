@@ -1,6 +1,7 @@
 #include "REMORA_NCTimeSeriesRiver.H"
 #include "REMORA_NCFile.H"
 #include "REMORA_TimeUnits.H"
+#include "REMORA_TimeInterp.H"
 
 #include "AMReX_ParallelDescriptor.H"
 
@@ -172,15 +173,17 @@ void NCTimeSeriesRiver::update_interpolated_to_time (amrex::Real time) {
         read_in_at_time(fab_before, i_time_before);
     }
 
-    amrex::Real dt = time_after - time_before;
-    amrex::Real time_before_copy = time_before;
+    // ROMS set_ngfld.F:83-100, reached for rivers via set_data.F:183. See
+    // REMORA_TimeInterp.H.
+    amrex::Real fac1, fac2;
+    REMORATimeInterp::weights(time, time_before, time_after, fac1, fac2);
 
     amrex::Box fab_domain(amrex::IntVect(0,0,0), amrex::IntVect(nriv-1,0,nzbox-1));
     auto interp_array = fab_interp->array();
     auto before_array = fab_before->array();
     auto after_array = fab_after->array();
     amrex::ParallelFor(fab_domain, [=] AMREX_GPU_DEVICE (int r, int , int k) {
-        interp_array(r,0,k) = before_array(r,0,k) + (time - time_before_copy) * (after_array(r,0,k) - before_array(r,0,k)) / dt;
+        interp_array(r,0,k) = fac1*before_array(r,0,k) + fac2*after_array(r,0,k);
     });
 }
 

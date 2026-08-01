@@ -2,6 +2,7 @@
 #include "REMORA_NCTimeSeries.H"
 #include "REMORA_NCFile.H"
 #include "REMORA_TimeUnits.H"
+#include "REMORA_TimeInterp.H"
 
 #include "AMReX_FillPatchUtil.H"
 #include "AMReX_Interpolater.H"
@@ -158,7 +159,9 @@ void NCTimeSeries::update_interpolated_to_time (amrex::Real time, int lev,
         read_in_at_time(mf_before, i_time_before);
     }
 
-    amrex::Real dt = time_after - time_before;
+    // ROMS set_2dfld.F:94-121. See REMORA_TimeInterp.H.
+    amrex::Real fac1, fac2;
+    REMORATimeInterp::weights(time, time_before, time_after, fac1, fac2);
 
     auto nodality = mf_interp_lev0->ixType();
 
@@ -169,8 +172,6 @@ void NCTimeSeries::update_interpolated_to_time (amrex::Real time, int lev,
         // Adjust box to match ROMS grid
         amrex::Box bx = mfi.growntilebox(amrex::IntVect(1-nodality[0],1-nodality[1],0));
 
-        amrex::Real time_before_copy = time_before;
-
         // Temporal interpolation is done once on level 0.
         amrex::MultiFab* mf_to_fill = mf_interp_lev0;
         amrex::Array4<amrex::Real> to_fill = mf_to_fill->array(mfi);
@@ -178,7 +179,7 @@ void NCTimeSeries::update_interpolated_to_time (amrex::Real time, int lev,
         amrex::Array4<const amrex::Real> after  = mf_after->const_array(mfi);
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            to_fill(i,j,k) = before(i,j,k) + (time - time_before_copy) * (after(i,j,k) - before(i,j,k)) / dt;
+            to_fill(i,j,k) = fac1*before(i,j,k) + fac2*after(i,j,k);
         });
     }
 
