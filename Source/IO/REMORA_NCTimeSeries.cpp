@@ -322,15 +322,18 @@ void NCTimeSeries::read_in_at_time (amrex::MultiFab* mf, int itime) {
         // every re-read, compounding as `scale^n`. An earlier version of this
         // fix did exactly that and had to be reverted. Scale the intersection,
         // which is precisely what this read refreshed.
+        //
+        // BaseFab::mult over the intersection box, NOT a ParallelFor. nvcc
+        // rejects an extended __device__ lambda inside a private member
+        // function ("The enclosing parent function for an extended __device__
+        // lambda cannot have private or protected access within its class"),
+        // and read_in_at_time is private. Widening its access just to place a
+        // lambda would be the tail wagging the dog; BaseFab::mult takes the box
+        // directly and is exactly the operation wanted.
         if (scale != amrex::Real(1.0)) {
-            const amrex::Real s = scale;
-            const amrex::Box  sbx = fab.box() & NC_fab.box();
+            const amrex::Box sbx = fab.box() & NC_fab.box();
             if (sbx.ok()) {
-                amrex::Array4<amrex::Real> arr = fab.array();
-                amrex::ParallelFor(sbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
-                {
-                    arr(i,j,k) = s * arr(i,j,k);
-                });
+                fab.template mult<amrex::RunOn::Device>(scale, sbx, 0, 1);
             }
         }
     } // mf
