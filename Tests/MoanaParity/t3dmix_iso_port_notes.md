@@ -1,38 +1,14 @@
-# `t3dmix2_iso` port: structural self-check
+# Isoneutral tracer diffusion
 
-Port of ROMS 3.9 rotated isoneutral harmonic tracer diffusion (`TS_DIF2` + `MIX_ISO_TS`)
-into REMORA as `REMORA::t3dmix2_iso`, selected with `remora.harmonic_mixing_type = isopycnal`
-(synonyms `isopycnic`, `iso`). Default (`s`) is unchanged.
+`remora.harmonic_mixing_type = isopycnal` selects ROMS harmonic tracer diffusion along surfaces of constant potential density (`TS_DIF2` with `MIX_ISO_TS`). `isopycnic` and `iso` are aliases. The default, `s`, diffuses tracers along terrain-following surfaces.
 
-## Sources
+## Density and grid indexing
 
-| Role | File |
-| --- | --- |
-| Specification (as compiled for Moana; all `#ifdef`s resolved) | `external/moana_spec/t3dmix.f90`, `t3dmix2_tile` at lines 517-800 |
-| Annotated original | `external/roms-3.9/ROMS/Nonlinear/t3dmix2_iso.h` |
-| Port | `Source/TimeIntegration/REMORA_t3dmix.cpp`, `REMORA::t3dmix2_iso` at lines 263-471 |
+The [diffusion kernel](../../Source/TimeIntegration/REMORA_t3dmix.cpp) uses the surface-referenced potential density anomaly from the [equation of state](../../Source/TimeIntegration/REMORA_rho_eos.cpp). For the nonlinear equation of state, `pden = (den1 − 1000) × rmask`, where `den1` is the density at zero pressure. For the linear equation of state, `pden = rho`. The field is computed from `state_old` at the ROMS `nrhs` time level. Isoneutral mixing allocates this field with the horizontal ghost cells needed for the adjacent-cell gradients.
 
-Guards that survived preprocessing in the Moana build: `MASKING` only. Off: `WET_DRY`,
-`DIFF_3DCOEF`, `TS_MIX_CLIMA`, `TS_MIX_STABILITY`, `TS_MIX_MAX_SLOPE`, `TS_MIX_MIN_STRAT`,
-`DIAGNOSTICS_TS`, `PROFILE`. The `.f90` and the `.h` agree term for term once those are
-resolved; no discrepancy was found between spec and original.
+Moana uses horizontal masks and a two-dimensional diffusivity for each tracer. The optional ROMS wetting/drying, three-dimensional diffusivity, climatology, stability and alternative slope-limiter branches are disabled. The active denominator limit is `eps = 0.5` kg/m³.
 
-Unused-in-Moana ROMS declarations deliberately not carried over (they are dead code with
-these cppdefs): `small = 1.0e-14` (`t3dmix2_iso.h:182`, used only under `TS_MIX_MAX_SLOPE`),
-`slope_max = 0.0001` (`:183`, ditto), `strat_min = 0.1` (`:184`, used only under
-`TS_MIX_MIN_STRAT`). Only `eps = 0.5` (`:181` / `t3dmix.f90:565`) is live.
-
-## Index-convention mapping
-
-ROMS carries the vertical dependence through the two-slot `(k1,k2)` recursive blocking of
-its `K_LOOP` (`t3dmix.f90:660-664`); this is a scratch-memory device, not a serial
-dependence. The port stores the same quantities as full 3D arrays, exactly as the existing
-`t3dmix2_geo` does. Because there is no vertical running dependence, every loop is a fully
-fused `(i,j,k,n)` `ParallelFor` — GPU-safe with no k-loop-inside-column construction needed.
-
-REMORA cells are `k = 0..N` (`AMREX_ASSERT(bx.smallEnd(2)==0 && bx.bigEnd(2)==N)` in
-`lin_eos`), bottom-up; ROMS rho levels are `1..N(ng)`. So REMORA cell `c` = ROMS rho level
-`c+1`, and `N(ng) = N+1`.
+ROMS reuses two work-array slots, `k1` and `k2`, in a vertical loop. REMORA stores full three-dimensional work arrays so each kernel can operate on all cells and tracer components in parallel. REMORA rho cells are numbered 0 through N from the bottom, corresponding to ROMS levels 1 through N+1.
 
 | ROMS | Meaning | Port |
 | --- | --- | --- |
@@ -43,39 +19,9 @@ REMORA cells are `k = 0..N` (`AMREX_ASSERT(bx.smallEnd(2)==0 && bx.bigEnd(2)==N)
 | ROMS faces `0` and `N(ng)` (zeroed) | bottom, top | faces `0` and `N+1` |
 | `IF (k.lt.N(ng))` around FS-final | interior faces only | `grow(zbx,IntVect(0,0,-1))` = `k = 1..N` |
 
-This is the same face convention `t3dmix2_geo` uses for `dTdz` (face `k` = lower face of
-cell `k`; `dTdz(i,j,0)` and `dTdz(i,j,N+1)` set to zero).
+## Flux calculation
 
-## Density field: `pden`, not `rho`
-
-Traced in the spec: `t3dmix.f90:506` passes `OCEAN(ng) % pden` (not `OCEAN(ng) % rho`) —
-i.e. **surface-referenced potential density anomaly**, not in-situ density. Set in
-`ROMS/Utility/../Nonlinear/rho_eos.F`:
-
-* nonlinear EOS — `rho_eos.F:479-482`: `rho = den` (in-situ), `pden = (den1 - 1000)*rmask`
-  (`den1` = zero-pressure density, i.e. before the secant bulk modulus compression).
-* linear EOS — `rho_eos.F:722-743`: `pden = rho`, identical.
-
-REMORA computed only the in-situ `rho`, so `pden` was plumbed through the same path as
-`rho`:
-
-* `REMORA::rho_eos` / `lin_eos` / `nonlin_eos` gain a `pden` output argument
-  (`Source/REMORA.H`, `Source/TimeIntegration/REMORA_rho_eos.cpp`).
-  `REMORA_rho_eos.cpp:107-109` mirrors `rho_eos.F:743`; `REMORA_rho_eos.cpp:259-262` mirrors
-  `rho_eos.F:479-482`.
-* `Source/TimeIntegration/REMORA_setup_step.cpp:54-57` allocates a local `mf_pden` with the
-  same `BoxArray`/`DistributionMapping`/ghost width as the existing local `mf_rho`, **only
-  when isopycnal mixing is selected**; otherwise an empty `Array4` is passed and the EOS
-  kernels skip the store (`calc_pden`). No extra memory or work in the default path.
-* `rho_eos` is already called on `gbx2` (grown by `NGROW`), so `pden` has the `i±1, j±1`
-  halo the kernel needs.
-* `pden` is derived from `state_old` (`nrhs`), matching ROMS, where `pden` comes from
-  `rho_eos` on `t(:,:,:,nrhs,:)` while `t3dmix` updates `nnew`.
-
-## Line-by-line flux comparison
-
-`SPEC` = `moana_spec/t3dmix.f90`; `H` = `roms-3.9/.../t3dmix2_iso.h`;
-`PORT` = `Source/TimeIntegration/REMORA_t3dmix.cpp`.
+The references below identify the preprocessed Moana ROMS routine (`SPEC`, `t3dmix.f90`), the original ROMS `t3dmix2_iso.h` (`H`), and the [REMORA implementation](../../Source/TimeIntegration/REMORA_t3dmix.cpp) (`PORT`).
 
 ### 1. Horizontal gradients at u points
 
@@ -87,8 +33,8 @@ REMORA computed only the in-situ `rho`, so `pden` was plumbed through the same p
   ```
 * PORT:349-354 — same, with `k+1 -> k` under the cell-index shift, `umask -> msku(i,j,0)`,
   `t(...,nrhs,...) -> state_rhs`. Mask is applied to `cff` (so to both `dRdx` and `dTdx`),
-  as a separate statement, exactly as in ROMS — not folded into the `0.5*(pm+pm)` product,
-  which would change rounding. Loop box `xbx` = `bx` node-centred in x, matching ROMS
+  as a separate statement, in ROMS order. Folding it into the `0.5*(pm+pm)` product
+  would change rounding. Loop box `xbx` = `bx` node-centred in x, matching ROMS
   `j=Jstr..Jend, i=Istr..Iend+1`.
 
 ### 2. Horizontal gradients at v points
@@ -134,10 +80,10 @@ REMORA computed only the in-situ `rho`, so `pden` was plumbed through the same p
            0.5*(MAX(dRdx(i,j,k1),0)*(dTdr(i-1,j,k1)+dTdr(i,j,k2))+
                 MIN(dRdx(i,j,k1),0)*(dTdr(i-1,j,k2)+dTdr(i,j,k1))))
   ```
-* PORT:403-413 — identical, with `k1 -> k`, `k2 -> k+1` for `dTdr`. The `MAX` term is kept
+* PORT:403-413 — with `k1 -> k`, `k2 -> k+1` for `dTdr`. The `MAX` term is kept
   first in the sum (ROMS order; the geopotential variant has `MIN` first because its slope
   has the opposite sign convention). `on_u` is expanded to `two/(pn(i-1,j,0)+pn(i,j,0))`,
-  which is verbatim ROMS `metrics.F:411`, including operand order. Curvilinear metrics
+  from ROMS `metrics.F:411`, including operand order. Curvilinear metrics
   therefore enter exactly as ROMS precomputes them.
 
 ### 6. Rotated y flux `FE`
@@ -155,7 +101,7 @@ REMORA computed only the in-situ `rho`, so `pden` was plumbed through the same p
   ... same four terms for dRde/dTde, accumulated as cff=cff+...
   FS(i,j,k2)=0.5*cff*diff2(i,j,itrc)*FS(i,j,k2)
   ```
-* PORT:439-457 — identical with `k1 -> k-1`, `k2 -> k` for the cell-level fields and
+* PORT:439-457 — with `k1 -> k-1`, `k2 -> k` for the cell-level fields and
   `dTdr(:,:,k2) -> dTdr(i,j,k)`. The x-part is accumulated into a local `cff`, then the
   y-part is added with `cff = cff + ...`, then `FS` is scaled — i.e. ROMS's association is
   preserved (the geopotential port instead writes `FS` twice, which associates differently;
@@ -176,61 +122,21 @@ REMORA computed only the in-situ `rho`, so `pden` was plumbed through the same p
   cff3=dt(ng)*(FS(i,j,k2)-FS(i,j,k1)); cff4=cff1+cff2+cff3
   t(i,j,k,nnew,itrc)=t(i,j,k,nnew,itrc)+cff4
   ```
-* PORT:464-469 — identical, `FS(k2)-FS(k1) -> FS(i,j,k+1)-FS(i,j,k)`, `t(...,nnew,...) ->
+* PORT:464-469 — `FS(k2)-FS(k1) -> FS(i,j,k+1)-FS(i,j,k)`, `t(...,nnew,...) ->
   state`. The four `cff*` temporaries are retained so the sum associates as
   `(cff1+cff2)+cff3`, as in ROMS.
 
-## Masking placement
+The u- and v-face masks enter the horizontal gradient metric. The fluxes use those masked gradients without a second mask. The face derivative and vertical flux extend one cell beyond the horizontal tile so adjacent faces can read them. The caller supplies the halo values. The divergence updates only the original cell box.
 
-ROMS applies `umask`/`vmask` only to the `cff` metric factor of the horizontal gradients
-(H:221-223, 253-255) — nowhere else. The port does the same. In particular the mask is
-**not** applied to `FX`/`FE` after the fact (which is what `t3dmix2_s` does, following its
-own ROMS variant), and `dTdr`/`FS` carry no mask. `WET_DRY` masks (H:224-226, 256-258) are
-absent from the preprocessed spec and are not ported.
+## Component tests
 
-## Boundary/edge handling
+The CPU Upwelling case uses a linear equation of state.
 
-Loop extents follow the ROMS tile bounds one-for-one: `xbx`/`ybx` are the x/y node-centred
-versions of `bx` (= `Istr..Iend+1` / `Jstr..Jend+1`); `dTdr`/`FS` are computed over `bx`
-grown by one cell in x and y (= `Istr-1..Iend+1`, `Jstr-1..Jend+1`) because `FX`/`FE` read
-`dTdr(i-1,·)` / `dTdr(·,j-1)`; the final update is over `bx`. Vertical boundaries are the
-zeroed faces `0` and `N+1`. No physical BC is applied inside the kernel, matching ROMS
-(the caller's fill-patching supplies the halo).
+| Test | Result |
+|---|---|
+| 20 steps with `remora.harmonic_mixing_type=isopycnal` | Completed and wrote `plt00020`. |
+| 20 steps with the default scheme | The plotfile data matched the baseline build bit for bit. Run metadata was excluded. |
+| Constant horizontal mixing with `remora.tnu2_temp=25` and `remora.tnu2_salt=25` m²/s | The terrain-following, geopotential and isoneutral runs produced distinct fields. The default Upwelling inputs have zero diffusivity. |
+| 100 steps with the isoneutral scheme at 25 m²/s | All 262,400 double-precision values examined in the output were finite. |
 
-## Verification
-
-1. **Build** — full CPU rebuild of `build/` (`make -j8`) is clean; no warnings or errors
-   from the touched translation units.
-2. **Smoke, new scheme** —
-   `remora_exec Exec/Upwelling/inputs remora.max_step=20 remora.harmonic_mixing_type=isopycnal`
-   runs 20 steps and writes `plt00020`.
-3. **Smoke, default** — `remora_exec Exec/Upwelling/inputs remora.max_step=20` runs 20 steps
-   and writes `plt00020`. Its plotfile is **bit-identical** (`diff -r`, excluding `job_info`)
-   to the same run from a `moana/dev` build, confirming the `pden` plumbing does not perturb
-   the default (`s`) path.
-4. **The kernel actually does something** — the stock Upwelling inputs leave `tnu2 = 0`, so
-   all three schemes trivially agree there. Re-running with
-   `remora.horizontal_mixing_type=constant remora.tnu2_temp=25 remora.tnu2_salt=25` (the
-   Moana value) gives three mutually distinct plotfiles for `s`, `geopotential` and `iso`,
-   i.e. the isopycnal branch is reached and produces its own tendency.
-5. **Stability / no NaN** — 100 steps with `iso` and `tnu2 = 25` complete; a raw scan of the
-   `plt00100` cell data (262,400 doubles) finds no NaN or Inf, with values in a physical
-   range.
-
-Notes on coverage:
-
-* The Upwelling case uses the **linear** EOS, so these runs exercise the kernel with
-  `pden == rho`. The nonlinear-EOS `pden` path (`den1 - 1000`) is compiled and plumbed but
-  is not exercised here.
-* AMReX FPE trapping (`amrex.fpe_trap_invalid=1`) cannot be used as an extra check on this
-  case: it fires in the pre-existing `Problem::init_analytic_bathymetry` during setup,
-  before any of this code runs.
-
-## Open questions
-
-* No numerical parity test against ROMS output yet — this is a structural port only. A
-  Moana-parity gate (single-column or small-box, comparing against a ROMS `t3dmix2_iso`
-  reference) would be the natural next step.
-* `diff2` is 2D-per-tracer in REMORA (matching ROMS `MIXING(ng)%diff2` with `DIFF_3DCOEF`
-  off), so the `DIFF_3DCOEF` branch (`diff3d_r(i,j,k)`) is not ported. If a 3-D diffusivity
-  is ever wanted, it is H:341-347, 361-367, 399-403.
+The component test exercised `pden = rho`. It did not test the nonlinear equation of state or compare individual fluxes numerically with a ROMS calculation. Enabling `amrex.fpe_trap_invalid` in this case caused an exception during analytic bathymetry initialisation, before the diffusion kernel ran.

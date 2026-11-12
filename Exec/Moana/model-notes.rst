@@ -95,7 +95,7 @@ Component tests
   step, shortwave radiation and rain agreed exactly.
 * **Restart record selection.** We used a file with a different temperature
   at each of three times to verify which record the model read.
-  `Restart record test <../../Tests/MoanaParity/hotstart_notes.md>`_.
+  `Restart record test <../../Tests/MoanaParity/restart_record_notes.md>`_.
 * **Time averages.** For nine fields, five-step averages agreed with means
   calculated from the history files to within 2.03 × 10⁻¹⁶ relative error.
   `Averaging tests <../../Tests/MoanaParity/avg_port_notes.md>`_.
