@@ -1,40 +1,44 @@
 Moana REMORA
 ============
 
-Moana REMORA runs the 5 km New Zealand Moana Ocean Hindcast configuration on
-NVIDIA GPUs. We ported it so we could build higher-resolution models of New
-Zealand waters using the same physics. The existing 5 km hindcast gave us a
-direct comparison with ROMS before changing the grid.
+This fork of REMORA runs the 5 km New Zealand Moana Ocean Hindcast on NVIDIA
+GPUs. We ported the existing ROMS configuration so we could use the same
+physics on finer grids.
 
 What changed
 ------------
 
-* Added Moana’s vertical grid stretching (Vstretching=5).
-* Ported Mellor–Yamada 2.5 vertical mixing.
-* Ported isoneutral tracer diffusion.
-* Added tidal elevation forcing at open boundaries.
-* Added tidal current forcing at open boundaries.
-* Added atmospheric pressure forcing.
-* Added shortwave radiation penetration below the surface.
-* Enabled hot starts from a selected ROMS restart record.
-* Added time-averaged NetCDF output.
-* Corrected river transport weighting.
-* Matched surface forcing times to ROMS.
-* Matched open-boundary update times to ROMS.
+The fork adds these Moana options.
+
+* Moana’s vertical grid stretching (Vstretching=5).
+* Mellor–Yamada 2.5 vertical mixing.
+* Isoneutral tracer diffusion.
+* Tidal elevation forcing at open boundaries.
+* Tidal current forcing at open boundaries.
+* Inverse-barometer terms in the pressure gradient and at open boundaries.
+* Shortwave radiation penetration through the water column.
+* Hot starts from a selected ROMS restart record.
+* Time-averaged NetCDF output.
+
+Three existing routines now follow ROMS timing and operation order.
+
+* River transport is interpolated in time before it is distributed over depth.
+* Surface forcing is sampled at the start of the time step.
+* Open-boundary data are sampled at the start of the time step.
 
 How we tested it
 ----------------
 
-We compared the GPU model with ROMS 3.9 on the Moana grid. For July 2009,
-we also ran ROMS eight times with round-off-scale perturbations to the initial
-conditions (about one ULP). At month end, 17 of 18 interior diagnostics fell
-at or below the largest difference between the ROMS runs. Mixed-layer depth
-was the exception. In a separate two-month drift test on an earlier build,
-the domain-mean surface temperature bias stayed below 0.0003 °C at both
-month ends.
+For July 2009, we compared the GPU run and eight ROMS runs against the same
+unperturbed ROMS 3.9 control. Each of the eight runs started with round-off-scale
+changes to the initial fields (about one ULP). At month end, 17 of 18 interior diagnostics showed a GPU–control difference
+no larger than the biggest ROMS–control difference.
+Mixed-layer depth was the exception.
 
-On these tests, we consider the 5 km port functionally equivalent to ROMS
-and numerically stable over the periods tested.
+In a two-month drift test on an earlier build, the surface temperature RMS difference grew
+from 0.016 to 0.030 °C while the domain-mean bias fell from +0.00025 to
++0.00008 °C. On these tests we consider the 5 km port functionally equivalent
+to ROMS and numerically stable over the periods tested.
 
 `Build instructions and test results <Exec/Moana/model-notes.rst>`_ ·
-`Moana configuration <Exec/Moana/inputs>`_
+`5 km case file <Exec/Moana/inputs>`_
