@@ -1,4 +1,4 @@
-# ROMS his/rst hot start (G9) — port notes
+# Initialisation from ROMS history and restart files
 
 Moana runs `# undef PERFECT_RESTART`, so ROMS initializes from
 zeta/ubar/vbar/u/v/temp/salt of one record of an ININAME file, selected by
@@ -46,4 +46,4 @@ selected record.
   starts at `t=0` unless set by inputs. ROMS sets `time` from the ini record.
   Needed for the month-chain protocol — follow-up.
 - `ubar`/`vbar` are written into every time slot; ROMS's `ini_fields` sets the
-  equivalent slots. Fine for a cold-ish start; revisit if exact restart matters.
+  equivalent slots. This test checks the initial fields. Exact continuation across a restart requires a separate test.

@@ -17,7 +17,7 @@ The fork adds these Moana options.
 * Tidal current forcing at open boundaries.
 * Inverse-barometer terms in the pressure gradient and at open boundaries.
 * Shortwave radiation penetration through the water column.
-* Hot starts from a selected ROMS restart record.
+* Initialisation from a selected time record in a ROMS history or restart file.
 * Time-averaged NetCDF output.
 
 Three existing routines now follow ROMS timing and operation order.
@@ -30,13 +30,13 @@ How we tested it
 ----------------
 
 For July 2009, we compared the GPU run and eight ROMS runs against the same
-unperturbed ROMS 3.9 control. Each of the eight runs started with round-off-scale
-changes to the initial fields (about one ULP). At month end, 17 of 18 interior diagnostics showed a GPU–control difference
-no larger than the biggest ROMS–control difference.
-Mixed-layer depth was the exception.
+unperturbed ROMS 3.9 control. We perturbed the initial fields in each of the
+eight ROMS runs by about one unit in the last place (ULP). At month end, the
+GPU run differed from the control by no more than the most divergent ROMS run
+for 17 of the 18 interior diagnostics. Mixed-layer depth was the exception.
 
-In a two-month drift test on an earlier build, the surface temperature RMS difference grew
-from 0.016 to 0.030 °C while the domain-mean bias fell from +0.00025 to
+In a two-month drift test on an earlier build, the root-mean-square difference in
+surface temperature grew from 0.016 to 0.030 °C while the domain-mean bias fell from +0.00025 to
 +0.00008 °C. On these tests we consider the 5 km port functionally equivalent
 to ROMS and numerically stable over the periods tested.
 

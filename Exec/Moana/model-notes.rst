@@ -40,7 +40,7 @@ Comparison with ROMS 3.9
 
 The tests used solver revision ``bd85f0d`` unless an earlier build is specified.
 
-**Short-step differences.** We perturbed the ROMS initial fields at wet points
+**Differences after 40 time steps.** We perturbed the ROMS initial fields at wet points
 by roughly one unit in the last place (ULP) and ran ROMS again. At step 40,
 the GPU–ROMS differences in sea level and eastward depth-averaged velocity
 were below the ROMS perturbation differences in all six distance-from-land
@@ -52,7 +52,7 @@ and turbulent kinetic energy were of order 10⁻¹¹ there.
 **July 2009, 26,784 steps.** We compared the GPU run with a ROMS control
 and eight ROMS runs with independent round-off-scale perturbations to the
 same initial state. We scored 18 month-end diagnostics, including mixed-layer
-depth and stratification, over the interior outside a 40-cell rim. Only
+depth and stratification, excluding the outer 40 grid cells. Only
 mixed-layer depth exceeded the largest corresponding ROMS ensemble difference.
 The prespecified failure threshold was five exceedances. Two GPU runs with
 identical inputs also reproduced sea level and both depth-averaged velocities
@@ -62,8 +62,9 @@ decorrelated by month end, which limits how small a defect this test can detect.
 **Two-month drift.** In an earlier build, REMORA carried its own July
 checkpoint into August for a total of 53,568 steps. The surface temperature
 RMS difference from ROMS grew from 0.016 to 0.030 °C. Over the same interval
-the domain-mean bias fell from +0.00025 to +0.00008 °C. At the July restart, ROMS reinitialised its turbulence prognostics
-while REMORA carried them into August.
+the domain-mean bias fell from +0.00025 to +0.00008 °C. At the July restart,
+ROMS reinitialised its prognostic turbulence variables. REMORA retained their
+July values.
 
 **Matched restarts.** Separate August and September 2009 runs began from
 ROMS restarts with matching forcing. Month-end interior temperature RMS
@@ -92,9 +93,9 @@ Component tests
 * **Atmospheric forcing.** ROMS writes the forcing for the next step. REMORA
   writes the forcing it just applied. After shifting the records by one 100 s
   step, shortwave radiation and rain agreed exactly.
-* **Hot starts.** A file with three distinct temperature records verified
-  selection of the first, middle and last records.
-  `Hot-start test <../../Tests/MoanaParity/hotstart_notes.md>`_.
+* **Restart record selection.** We used a file with a different temperature
+  at each of three times to verify which record the model read.
+  `Restart record test <../../Tests/MoanaParity/hotstart_notes.md>`_.
 * **Time averages.** For nine fields, five-step averages agreed with means
   calculated from the history files to within 2.03 × 10⁻¹⁶ relative error.
   `Averaging tests <../../Tests/MoanaParity/avg_port_notes.md>`_.
