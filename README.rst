@@ -9,17 +9,18 @@ direct comparison with ROMS before changing the grid.
 What changed
 ------------
 
-REMORA already had the GPU ocean solver. To run Moana, we added:
-
-* Moana’s vertical grid (Vstretching=5), Mellor–Yamada 2.5 vertical mixing
-  and isoneutral tracer diffusion.
-* Tidal elevations and currents at open boundaries, atmospheric pressure
-  forcing and penetration of sunlight below the surface.
-* Support for starting from a selected ROMS restart record and writing
-  time-averaged NetCDF output.
-
-We also corrected river transport weighting and the timing of forcing and
-boundary updates to match ROMS.
+* Added Moana’s vertical grid stretching (Vstretching=5).
+* Ported Mellor–Yamada 2.5 vertical mixing.
+* Ported isoneutral tracer diffusion.
+* Added tidal elevation forcing at open boundaries.
+* Added tidal current forcing at open boundaries.
+* Added atmospheric pressure forcing.
+* Added shortwave radiation penetration below the surface.
+* Enabled hot starts from a selected ROMS restart record.
+* Added time-averaged NetCDF output.
+* Corrected river transport weighting.
+* Matched surface forcing times to ROMS.
+* Matched open-boundary update times to ROMS.
 
 How we tested it
 ----------------
